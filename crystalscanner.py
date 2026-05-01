@@ -100,14 +100,13 @@ def load_config():
         return None
 
 def setup():
-    print("\n=== SETUP ===")
-    token = input("Seu Token de Conta (Selfbot): ").strip()
-    channels = input("Channels (ex: 123,456): ").split(",")
+    print("\n=== Configuração Inicial ===")
+    token = input("Digite seu Token de Conta (Selfbot): ").strip()
+    canais_input = input("Digite os IDs dos canais, separados por vírgula: ").strip()
+    canais = [int(c.strip()) for c in canais_input.split(",") if c.strip().isdigit()]
 
-    channels = [int(c.strip()) for c in channels if c.strip().isdigit()]
-
-    save_config(token, channels)
-    print("[+] Config salva\n")
+    save_config(token, canais)
+    print("[+] Configuração salva!\n")
 
 def reset():
     if os.path.exists(CONFIG_FILE):
@@ -166,7 +165,7 @@ def start():
     TOKEN = config["token"]
     CHANNELS = config["channels"]
 
-    client.run(TOKEN)  # Corrigido aqui: sem argumentos extras
+    client.run(TOKEN)  # Aqui, apenas TOKEN, sem argumentos extras
 
 # =========================
 # 📋 MENU
