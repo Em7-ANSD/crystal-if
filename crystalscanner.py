@@ -220,7 +220,7 @@ def make_layout():
     )
 
     # Cabeçalho
-    layout["header"].update(Panel("[bold cyan]🕵️‍♂️ Hacker Panel - Discord Scanner[/bold cyan]", style="bold green"))
+    layout["header"].update(Panel("[bold cyan]🔍 crystalX - Discord Scanner Forense[/bold cyan]", style="bold green"))
 
     # Corpo com mensagens
     table = Table(expand=True)
