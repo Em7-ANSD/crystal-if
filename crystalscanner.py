@@ -198,7 +198,7 @@ def fetch_messages(limit=20):
 # =========================
 
 def scanner_loop():
-    global seen, messages, risk_engine
+    global seen, messages, risk_engine, investigation_engine
     print("\n[+] Scanner iniciado...\n")
     while True:
         try:
@@ -216,8 +216,16 @@ def scanner_loop():
                 now_str = datetime.now().strftime("%H:%M:%S")
                 # Processar risco
                 risco = risk_engine.process_message(uid, content)
+                # Análise investigativa
+                insights = investigation_engine.analyze_message(uid, content, datetime.now())
                 # Adicionar na lista de mensagens para painel
-                messages.append({"time": now_str, "id": m["id"], "content": content, "risk": risco})
+                messages.append({
+                    "time": now_str,
+                    "id": m["id"],
+                    "content": content,
+                    "risk": risco,
+                    "insights": insights
+                })
                 # Limitar tamanho da lista
                 if len(messages) > 100:
                     messages.pop(0)
@@ -261,6 +269,10 @@ def comando_input():
             elif cmd.lower() == "!sair":
                 print("Encerrando comando input...")
                 os._exit(0)
+            elif cmd.lower() == "!relatorio":
+                # Gera e exibe o relatório de investigação
+                relatorio = investigation_engine.generate_report()
+                print(relatorio)
         except Exception as e:
             print(f"Erro na entrada de comando: {e}")
 
@@ -287,11 +299,12 @@ def make_layout():
     table.add_column("Risco", style="red")
     for msg in messages[-20:]:
         risco_str = str(msg.get('risk', 0))
+        insights_str = "\n".join(msg.get('insights', []))
         table.add_row(msg['time'], msg['id'], msg['content'], risco_str)
     layout["body"].update(Panel(table, title="Mensagens Recentes"))
 
     # Rodapé com instruções
-    footer_text = "[bold yellow]Comandos:[/bold yellow] [green]!enviar mensagem[/green], [red]!sair[/red]"
+    footer_text = "[bold yellow]Comandos:[/bold yellow] [green]!enviar mensagem[/green], [red]!sair[/red], [blue]!relatorio[/blue]"
     layout["footer"].update(Panel(footer_text))
     return layout
 
@@ -306,7 +319,7 @@ def run_dashboard():
 # =========================
 
 def start_scanner():
-    global TOKEN, CHANNEL_ID, HEADERS, risk_engine
+    global TOKEN, CHANNEL_ID, HEADERS, risk_engine, investigation_engine
     config = load_config()
     if not config:
         print("\n[-] Nenhuma config encontrada\n")
@@ -321,8 +334,9 @@ def start_scanner():
     CHANNEL_ID = config["channel_id"]
     HEADERS = {"Authorization": TOKEN}
 
-    # Instanciar RiskEngine
+    # Instanciar RiskEngine e InvestigationEngine
     risk_engine = RiskEngine()
+    investigation_engine = InvestigationEngine()
 
     # Thread do scanner
     threading.Thread(target=scanner_loop, daemon=True).start()
@@ -344,7 +358,8 @@ def menu():
         print("[3] Login Key")
         print("[4] Sair")
         print("\nDigite '!enviar Sua mensagem' para enviar uma mensagem ao Discord enquanto o scanner roda.")
-        print("Digite '!sair' no comando de entrada para parar o comando.\n")
+        print("Digite '!sair' no comando de entrada para parar o comando.")
+        print("Digite '!relatorio' para gerar o relatório completo de investigação.\n")
         op = input(">> ").strip()
 
         if op == "1":
