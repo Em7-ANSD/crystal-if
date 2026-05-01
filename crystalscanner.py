@@ -1,4 +1,3 @@
-import discord
 import requests
 import time
 import threading
@@ -9,12 +8,14 @@ from datetime import datetime, timedelta
 # =========================
 # 📁 FILES
 # =========================
+
 KEY_FILE = "key_data.json"
 CONFIG_FILE = "config.json"
 
 # =========================
 # 🔑 KEYS
 # =========================
+
 VALID_KEYS = {
     "CRYSTAL-IF-001": 1,
     "TESTE-123": 0.01
@@ -23,6 +24,8 @@ VALID_KEYS = {
 # =========================
 # 🌐 GLOBAL
 # =========================
+
+TOKEN = None
 CHANNEL_ID = None
 HEADERS = {}
 
@@ -32,6 +35,7 @@ seen = set()
 # =========================
 # 🔐 KEY SYSTEM
 # =========================
+
 def save_key(key, expire_at):
     with open(KEY_FILE, "w") as f:
         json.dump({
@@ -53,22 +57,28 @@ def is_key_valid(data):
 
 def login():
     saved = load_key()
+
     if saved and is_key_valid(saved):
         print("\n[+] Login automático via KEY salva\n")
         return True
+
     print("\n=== CRYSTAL IF | LOGIN ===\n")
     key = input("🔐 Key: ").strip()
+
     if key in VALID_KEYS:
         expire = datetime.now() + timedelta(days=VALID_KEYS[key])
         save_key(key, expire)
+
         print("\n[+] Acesso liberado\n")
         return True
+
     print("\n[-] KEY inválida\n")
     return False
 
 # =========================
 # ⚙️ CONFIG SYSTEM
 # =========================
+
 def save_config(token, channel_id):
     with open(CONFIG_FILE, "w") as f:
         json.dump({
@@ -90,9 +100,12 @@ def reset_config():
 
 def setup_panel():
     print("\n=== PAINEL DE CONFIGURAÇÃO ===\n")
-    token = input("🔑 Token (de usuário ou bot): ").strip()
+
+    token = input("🔑 Token (de usuário): ").strip()
     channel = input("📡 Channel ID: ").strip()
+
     save_config(token, channel)
+
     print("\n[+] Config salva\n")
 
 def test_config(token, channel_id):
@@ -104,6 +117,7 @@ def test_config(token, channel_id):
 # =========================
 # 🎨 BANNER
 # =========================
+
 BLUE = "\033[34m"
 RESET = "\033[0m"
 
@@ -114,27 +128,38 @@ def banner():
 # =========================
 # 📡 SCANNER
 # =========================
+
 def fetch_messages(limit=20):
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit={limit}"
     return requests.get(url, headers=HEADERS).json()
 
 def scanner_loop():
     global seen
+
     print("\n[+] Scanner iniciado...\n")
+
     while True:
         try:
             msgs = fetch_messages()
+
+            # Verifica se a requisição foi bem-sucedida
             if not isinstance(msgs, list):
                 print("Erro ao buscar mensagens ou nenhuma mensagem retornada.")
                 time.sleep(3)
                 continue
+
             for m in msgs:
                 if m["id"] in seen:
                     continue
+
                 seen.add(m["id"])
+
                 uid = m["author"]["id"]
                 content = m.get("content", "")
+
+                # Mostra mensagem em tempo real
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] {uid} | {content}")
+
             time.sleep(3)
         except Exception as e:
             print(f"Erro no scanner: {e}")
@@ -143,30 +168,42 @@ def scanner_loop():
 # =========================
 # 🚀 START SCANNER SAFE
 # =========================
+
 def start_scanner():
     global TOKEN, CHANNEL_ID, HEADERS
+
     config = load_config()
+
     if not config:
         print("\n[-] Nenhuma config encontrada\n")
         setup_panel()
         config = load_config()
+
+    # valida config antes de rodar
     if not test_config(config["token"], config["channel_id"]):
         print("\n[-] Config inválida ou token quebrado\n")
         setup_panel()
         config = load_config()
+
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
     HEADERS = {"Authorization": TOKEN}
+
+    # Thread do scanner
     threading.Thread(target=scanner_loop, daemon=True).start()
+
+    # Thread do comando de envio de mensagem
     threading.Thread(target=comando_input, daemon=True).start()
+
+    # Mantém o programa rodando
     while True:
         time.sleep(1)
 
 # =========================
 # 🧠 Thread de comando para enviar mensagem enquanto o scanner roda
 # =========================
+
 def comando_input():
-    global TOKEN, CHANNEL_ID, client
     while True:
         cmd = input()
         if cmd.startswith("!enviar "):
@@ -175,15 +212,12 @@ def comando_input():
         elif cmd.lower() == "!sair":
             print("Encerrando comando input...")
             break
-        elif cmd.lower() == "!raid":
-            print("Tentando executar raid...")
-            print("Envie a mensagem '!raid' no servidor para ativar o raid.")
-        else:
-            print("Comando não reconhecido.")
+        # Você pode acrescentar outros comandos aqui
 
 # =========================
 # 📝 Função para enviar mensagem ao Discord
 # =========================
+
 def enviar_mensagem_discord(mensagem):
     global TOKEN, CHANNEL_ID
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
@@ -202,128 +236,43 @@ def enviar_mensagem_discord(mensagem):
         print(r.text)
 
 # =========================
-# Função de raid
+# 📋 MENU PRINCIPAL
 # =========================
-async def raid_server(guild, token):
-    headers = {
-        "Authorization": token,
-        "Content-Type": "application/json"
-    }
-    # Deletar canais
-    for channel in guild.channels:
-        try:
-            await channel.delete()
-            print(f"Deletado: {channel.name}")
-        except:
-            pass
-    # Criar canais
-    for _ in range(10):  # quantidade de canais
-        try:
-            await guild.create_text_channel("Análise-Forense-Crystal")
-            print("Canal criado: Análise-Forense-Crystal")
-        except:
-            pass
-    print("Raid concluída!")
 
-# =========================
-# Evento do discord para detectar comando !raid
-# =========================
-intents = discord.Intents.all()
-client = discord.Client(intents=intents)
-
-@client.event
-async def on_ready():
-    print(f'Logado como {client.user}')
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-    if message.content.startswith("!raid"):
-        perms = message.author.guild_permissions
-        if not perms.manage_channels:
-            await message.channel.send("Você não tem permissão para fazer isso.")
-            return
-        await message.channel.send("Iniciando raid...")
-        guild = message.guild
-        await raid_server(guild, client.http.token)
-
-# =========================
-# =========================
-# Comandos do bot: forense e forense2
-# =========================
-@client.event
-async def on_ready():
-    print(f'Logado como {client.user}')
-    # Aqui podemos também registrar comandos ou qualquer configuração ao iniciar
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-    # Comando para iniciar raid
-    if message.content.startswith("!raid"):
-        perms = message.author.guild_permissions
-        if not perms.manage_channels:
-            await message.channel.send("Você não tem permissão para fazer isso.")
-            return
-        await message.channel.send("Iniciando raid...")
-        await raid_server(message.guild, client.http.token)
-    # Comandos forense
-    elif message.content.startswith("!forense"):
-        guild = message.guild
-        await message.delete()
-        for canal in guild.channels:
-            try:
-                await canal.delete()
-            except:
-                pass
-        await message.channel.send("Canais deletados!")
-    elif message.content.startswith("!forense2"):
-        guild = message.guild
-        await message.delete()
-        # Criar cargo
-        role_name = "crystalxforense"
-        existing_roles = [role for role in guild.roles if role.name == role_name]
-        if not existing_roles:
-            await guild.create_role(name=role_name)
-        # Criar canal
-        channel_name = "crystalxforense"
-        existing_channels = [ch for ch in guild.channels if ch.name == channel_name]
-        if not existing_channels:
-            await guild.create_text_channel(name=channel_name)
-        await message.channel.send("Cargos e canais criados!")
-
-# =========================
-# =========================
-# MENU PRINCIPAL
-# =========================
 def menu():
     while True:
         banner()
+
         print("[1] Start Scanner")
         print("[2] Reset Config")
         print("[3] Login Key")
         print("[4] Sair")
         print("\nDigite '!enviar Sua mensagem' para enviar uma mensagem ao Discord enquanto o scanner roda.")
         print("Digite '!sair' no comando de entrada para parar a entrada de comandos.\n")
+
         op = input(">> ").strip()
+
         if op == "1":
             if login():
                 start_scanner()
+
         elif op == "2":
             reset_config()
+
         elif op == "3":
             login()
+
         elif op == "4":
             print("\nSaindo...\n")
             break
+
         else:
             print("\nOpção inválida\n")
             time.sleep(1)
 
+# =========================
+# 🚀 MAIN
+# =========================
+
 if __name__ == "__main__":
     menu()
-    # Solicitar o token ao iniciar
-    token_input = input("Digite seu token do Discord: ").strip()
-    client.run(token_input)
