@@ -4,8 +4,6 @@ import threading
 import os
 import json
 from datetime import datetime, timedelta
-import pandas as pd
-import matplotlib.pyplot as plt
 
 # =========================
 # 📁 FILES
@@ -146,37 +144,50 @@ def analisar_metadados():
         print("Nenhum dado de metadados para analisar ainda.")
         return
     
-    df = pd.DataFrame(metadados)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df['hora'] = df['timestamp'].dt.hour
+    # Converter lista de dicts em manipulação manual
+    # Adicionar uma chave 'hora' para cada item
+    for item in metadados:
+        item['timestamp_obj'] = item['timestamp']
+        # 'timestamp' já é um datetime, se não, converta aqui
+        # item['timestamp_obj'] = datetime.strptime(item['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
+        item['hora'] = item['timestamp_obj'].hour
 
     # Distribuição de atividades por hora
-    atividades_por_hora = df['hora'].value_counts().sort_index()
-    print("\nDistribuição de atividades por hora:")
-    print(atividades_por_hora)
+    atividades_por_hora = {}
+    for item in metadados:
+        h = item['hora']
+        atividades_por_hora[h] = atividades_por_hora.get(h, 0) + 1
 
-    # Plotar gráfico
+    print("\nDistribuição de atividades por hora:")
+    for hour in sorted(atividades_por_hora):
+        print(f"{hour}:00 - {atividades_por_hora[hour]} mensagens")
+    
+    # Plotagem
+    import matplotlib.pyplot as plt
+    horas = sorted(atividades_por_hora)
+    valores = [atividades_por_hora[h] for h in horas]
     plt.figure(figsize=(10,6))
-    atividades_por_hora.plot(kind='bar')
+    plt.bar(horas, valores)
     plt.title('Atividades por Hora')
     plt.xlabel('Hora do dia')
     plt.ylabel('Número de mensagens')
     plt.show()
 
     # Atividades fora do horário (exemplo: 8h às 22h)
-    horarios_atipicos = df[(df['hora'] < 8) | (df['hora'] > 22)]
+    horarios_atipicos = [item for item in metadados if item['hora'] < 8 or item['hora'] > 22]
     print("\nAtividades fora do horário normal:")
-    print(horarios_atipicos)
+    for at in horarios_atipicos:
+        print(f"{at['timestamp']} - {at['content']}")
 
     # Mudanças de localização
-    locais_unicos = df['localizacao'].unique()
+    locais_unicos = set(item['localizacao'] for item in metadados)
     if len(locais_unicos) > 1:
         print(f"\nMudanças de localização detectadas: {locais_unicos}")
     else:
         print("\nSem mudanças de localização detectadas.")
 
     # Dispositivos utilizados
-    dispositivos_unicos = df['dispositivo'].unique()
+    dispositivos_unicos = set(item['dispositivo'] for item in metadados)
     print(f"\nDispositivos utilizados: {dispositivos_unicos}")
 
 def scanner_loop():
@@ -202,9 +213,8 @@ def scanner_loop():
                 uid = m["author"]["id"]
                 content = m.get("content", "")
                 timestamp_str = m["timestamp"]
-                # Supondo o formato ISO 8601
+                # Converter timestamp para datetime
                 timestamp = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-                # Aqui, se seus dados tiverem esses campos, use-os; se não, deixe como "Desconhecido"
                 localizacao = m.get("localizacao", "Desconhecido")
                 dispositivo = m.get("dispositivo", "Desconhecido")
 
@@ -218,10 +228,8 @@ def scanner_loop():
                     "dispositivo": dispositivo
                 })
 
-                # Mostrar mensagem em tempo real
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] {uid} | {content}")
 
-            # Análise após cada ciclo
             analisar_metadados()
 
             time.sleep(3)
@@ -243,7 +251,6 @@ def start_scanner():
         setup_panel()
         config = load_config()
 
-    # valida config antes de rodar
     if not test_config(config["token"], config["channel_id"]):
         print("\n[-] Config inválida ou token quebrado\n")
         setup_panel()
