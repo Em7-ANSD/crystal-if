@@ -139,20 +139,31 @@ def scanner_loop():
     print("\n[+] Scanner iniciado...\n")
 
     while True:
-        msgs = fetch_messages()
+        try:
+            msgs = fetch_messages()
 
-        for m in msgs:
-            if m["id"] in seen:
+            # Verifica se a requisição foi bem-sucedida
+            if not isinstance(msgs, list):
+                print("Erro ao buscar mensagens ou nenhuma mensagem retornada.")
+                time.sleep(3)
                 continue
 
-            seen.add(m["id"])
+            for m in msgs:
+                if m["id"] in seen:
+                    continue
 
-            uid = m["author"]["id"]
-            content = m.get("content", "")
+                seen.add(m["id"])
 
-            print(f"{uid} | {content[:50]}")
+                uid = m["author"]["id"]
+                content = m.get("content", "")
 
-        time.sleep(3)
+                # Mostra mensagem em tempo real
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] {uid} | {content}")
+
+            time.sleep(3)
+        except Exception as e:
+            print(f"Erro no scanner: {e}")
+            time.sleep(3)
 
 # =========================
 # 🚀 START SCANNER SAFE
