@@ -9,6 +9,7 @@ import os
 import json
 from datetime import datetime, timedelta
 import requests
+import collections
 
 # =========================
 # 📁 FILES
@@ -39,6 +40,60 @@ seen = set()
 messages = []  # Para armazenar mensagens recebidas para o painel
 
 console = Console()
+
+# =========================
+# Risk Engine para Score de Risco
+# =========================
+
+class RiskEngine:
+    def __init__(self):
+        self.users = {}
+        self.time_window_seconds = 10
+        self.spam_threshold = 3
+        self.short_msg_threshold = 3
+        self.short_msg_length = 10
+
+    def process_message(self, user_id, content):
+        now = datetime.now()
+        user_data = self.users.get(user_id, {
+            'messages': collections.deque(maxlen=50),
+            'short_msgs': collections.Counter(),
+            'risk_score': 0
+        })
+
+        # Atualizar mensagens recentes
+        user_data['messages'].append((now, content))
+        # Mensagens curtas
+        if len(content) <= self.short_msg_length:
+            user_data['short_msgs'][content] += 1
+
+        # Spam: mensagens repetidas
+        message_texts = [msg[1] for msg in user_data['messages']]
+        last_msgs = message_texts[-self.spam_threshold:]
+        is_spam = False
+        if len(last_msgs) >= self.spam_threshold and len(set(last_msgs)) == 1:
+            is_spam = True
+
+        # Flood: muitas mensagens na janela de tempo
+        recent_msgs = [msg for msg in user_data['messages']
+                       if (now - msg[0]).total_seconds() <= self.time_window_seconds]
+        is_flood = len(recent_msgs) >= self.spam_threshold
+
+        # Mensagens curtas repetidas
+        short_repeats = sum(1 for count in user_data['short_msgs'].values() if count >= self.short_msg_threshold)
+
+        # Atualiza risco
+        risk_delta = 0
+        if is_spam:
+            risk_delta += 3
+        if is_flood:
+            risk_delta += 3
+        if short_repeats > 0:
+            risk_delta += 2
+
+        user_data['risk_score'] = min(max(user_data['risk_score'] + risk_delta, 0), 10)
+        self.users[user_id] = user_data
+        return user_data['risk_score']
 
 # =========================
 # 🔐 KEY SYSTEM
@@ -143,7 +198,7 @@ def fetch_messages(limit=20):
 # =========================
 
 def scanner_loop():
-    global seen, messages
+    global seen, messages, risk_engine
     print("\n[+] Scanner iniciado...\n")
     while True:
         try:
@@ -158,10 +213,12 @@ def scanner_loop():
                 seen.add(m["id"])
                 uid = m["author"]["id"]
                 content = m.get("content", "")
-                now = datetime.now().strftime("%H:%M:%S")
-                # Adiciona na lista de mensagens para painel
-                messages.append({"time": now, "id": m["id"], "content": content})
-                # Limita tamanho da lista
+                now_str = datetime.now().strftime("%H:%M:%S")
+                # Processar risco
+                risco = risk_engine.process_message(uid, content)
+                # Adicionar na lista de mensagens para painel
+                messages.append({"time": now_str, "id": m["id"], "content": content, "risk": risco})
+                # Limitar tamanho da lista
                 if len(messages) > 100:
                     messages.pop(0)
             time.sleep(3)
@@ -227,8 +284,10 @@ def make_layout():
     table.add_column("Hora", style="cyan", no_wrap=True)
     table.add_column("ID", style="magenta")
     table.add_column("Mensagem", style="white")
+    table.add_column("Risco", style="red")
     for msg in messages[-20:]:
-        table.add_row(msg['time'], msg['id'], msg['content'])
+        risco_str = str(msg.get('risk', 0))
+        table.add_row(msg['time'], msg['id'], msg['content'], risco_str)
     layout["body"].update(Panel(table, title="Mensagens Recentes"))
 
     # Rodapé com instruções
@@ -247,7 +306,7 @@ def run_dashboard():
 # =========================
 
 def start_scanner():
-    global TOKEN, CHANNEL_ID, HEADERS
+    global TOKEN, CHANNEL_ID, HEADERS, risk_engine
     config = load_config()
     if not config:
         print("\n[-] Nenhuma config encontrada\n")
@@ -261,6 +320,9 @@ def start_scanner():
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
     HEADERS = {"Authorization": TOKEN}
+
+    # Instanciar RiskEngine
+    risk_engine = RiskEngine()
 
     # Thread do scanner
     threading.Thread(target=scanner_loop, daemon=True).start()
