@@ -12,7 +12,7 @@ KEY_FILE = "key.json"
 CONFIG_FILE = "config.json"
 
 # =========================
-# 🔑 KEYS (example)
+# 🔑 KEYS (exemplo)
 # =========================
 
 VALID_KEYS = {
@@ -102,7 +102,7 @@ def reset_config():
 
 def setup_config():
     print("\n=== SETUP ===\n")
-    token = input("Bot Token: ").strip()
+    token = input("User Token: ").strip()
     channels = input("Channels (comma separated): ").split(",")
 
     channels = [int(c.strip()) for c in channels]
@@ -138,7 +138,7 @@ def render(channel, author, content):
 # 🤖 DISCORD CLIENT
 # =========================
 
-class SelfBot(discord.Client):
+class Client(discord.Client):
     def __init__(self):
         super().__init__(intents=discord.Intents.all())
 
@@ -148,8 +148,8 @@ class SelfBot(discord.Client):
         print("\n[+] CRYSTAL IF ONLINE\n")
 
     async def on_message(self, message):
-        # Process own messages and monitored channels only
-        if message.author != self.user or (CHANNELS and message.channel.id not in CHANNELS):
+        # Process messages from monitored channels only
+        if CHANNELS and message.channel.id not in CHANNELS:
             return
 
         log_msg(message.channel.id, message.author.name, message.content)
@@ -171,7 +171,7 @@ def start():
     TOKEN = config["token"]
     CHANNELS = config["channels"]
 
-    client = SelfBot()
+    client = Client()
     client.run(TOKEN, reconnect=True)
 
 # =========================
