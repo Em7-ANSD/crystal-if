@@ -135,29 +135,24 @@ def render(channel, author, content):
     print("STATUS: LIVE MONITORING")
 
 # =========================
-# 🤖 DISCORD BOT
+# 🤖 DISCORD CLIENT
 # =========================
 
-intents = discord.Intents.default()
-intents.message_content = True
-client = discord.Client(intents=intents)
+class SelfBot(discord.Client):
+    async def on_ready(self):
+        os.system("clear")
+        print(ASCII)
+        print("\n[+] CRYSTAL IF ONLINE\n")
 
-@client.event
-async def on_ready():
-    os.system("clear")
-    print(ASCII)
-    print("\n[+] CRYSTAL IF ONLINE\n")
+    async def on_message(self, message):
+        if message.author == self.user:
+            return
 
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
+        if CHANNELS and message.channel.id not in CHANNELS:
+            return
 
-    if CHANNELS and message.channel.id not in CHANNELS:
-        return
-
-    log_msg(message.channel.id, message.author.name, message.content)
-    render(message.channel.id, message.author.name, message.content)
+        log_msg(message.channel.id, message.author.name, message.content)
+        render(message.channel.id, message.author.name, message.content)
 
 # =========================
 # 🚀 START SCANNER
@@ -175,6 +170,7 @@ def start():
     TOKEN = config["token"]
     CHANNELS = config["channels"]
 
+    client = SelfBot()
     client.run(TOKEN)
 
 # =========================
