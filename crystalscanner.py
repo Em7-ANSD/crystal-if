@@ -187,14 +187,32 @@ def start_scanner():
 
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
-
-    # Para selfbot, não colocar "Bot " na autorização, usar o token direto
     HEADERS = {"Authorization": TOKEN}
 
+    # Thread do scanner
     threading.Thread(target=scanner_loop, daemon=True).start()
 
+    # Thread do comando de envio de mensagem
+    threading.Thread(target=comando_input, daemon=True).start()
+
+    # Mantém o programa rodando
     while True:
         time.sleep(1)
+
+# =========================
+# 🧠 Thread de comando para enviar mensagem enquanto o scanner roda
+# =========================
+
+def comando_input():
+    while True:
+        cmd = input()
+        if cmd.startswith("!enviar "):
+            mensagem = cmd[len("!enviar "):]
+            enviar_mensagem_discord(mensagem)
+        elif cmd.lower() == "!sair":
+            print("Encerrando comando input...")
+            break
+        # Você pode acrescentar outros comandos aqui
 
 # =========================
 # 📝 Função para enviar mensagem ao Discord
@@ -228,8 +246,9 @@ def menu():
         print("[1] Start Scanner")
         print("[2] Reset Config")
         print("[3] Login Key")
-        print("[4] Enviar mensagem ao Discord")
-        print("[5] Exit\n")
+        print("[4] Sair")
+        print("\nDigite '!enviar Sua mensagem' para enviar uma mensagem ao Discord enquanto o scanner roda.")
+        print("Digite '!sair' no comando de entrada para parar a entrada de comandos.\n")
 
         op = input(">> ").strip()
 
@@ -244,10 +263,6 @@ def menu():
             login()
 
         elif op == "4":
-            mensagem = input("Digite a mensagem a enviar: ")
-            enviar_mensagem_discord(mensagem)
-
-        elif op == "5":
             print("\nSaindo...\n")
             break
 
