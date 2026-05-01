@@ -1,7 +1,10 @@
 import requests
 import time
+import random
 import threading
 import os
+import json
+from datetime import datetime, timedelta
 
 # =========================
 # 🔐 CONFIG
@@ -18,7 +21,64 @@ user_profiles = {}
 seen = set()
 
 # =========================
-# 🎨 ASCII BANNER (AZUL ESCURO FIXO)
+# 🔑 SISTEMA DE KEY
+# =========================
+
+KEY_FILE = "key_data.json"
+
+VALID_KEYS = {
+    "CRYSTAL-IF-001": 1,   # 1 dia
+    "TESTE-123": 0.01      # teste curto (~15 min)
+}
+
+def save_key(key, expire_at):
+    data = {
+        "key": key,
+        "expire_at": expire_at.timestamp()
+    }
+    with open(KEY_FILE, "w") as f:
+        json.dump(data, f)
+
+def load_key():
+    try:
+        with open(KEY_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return None
+
+def is_key_valid(data):
+    if not data:
+        return False
+
+    expire_at = datetime.fromtimestamp(data["expire_at"])
+    return datetime.now() <= expire_at
+
+def login():
+    saved = load_key()
+
+    if saved and is_key_valid(saved):
+        print("\n[+] LOGIN AUTOMÁTICO LIBERADO (KEY SALVA)\n")
+        return True
+
+    print("\n=== CRYSTAL IF | PAINEL DE ACESSO ===\n")
+
+    key = input("🔐 Digite sua key: ").strip()
+
+    if key in VALID_KEYS:
+        days = VALID_KEYS[key]
+        expire_at = datetime.now() + timedelta(days=days)
+
+        save_key(key, expire_at)
+
+        print(f"\n[+] Acesso liberado")
+        print(f"[+] Expira em: {expire_at}\n")
+        return True
+
+    print("\n[-] Key inválida\n")
+    return False
+
+# =========================
+# 🎨 ASCII BANNER (AZUL FIXO)
 # =========================
 
 BLUE = "\033[34m"
@@ -38,13 +98,6 @@ ________  .___  ________.___________________  .____
  |    `   \   \    \_\  \   | |    |/    |    \    |___
 /_______  /___|\______  /___| |____|\____|__  /_______ \
         \/            \/                    \/        \/
-
-___________________ _____________________ _______    _________.____________
-\_   _____/\_____  \\______   \_   _____/ \      \  /   _____/|   \_   ___ \
- |    __)   /   |   \|       _/|    __)_  /   |   \ \_____  \ |   /    \  \/
- |     \   /    |    \    |   \|        \/    |    \/        \|   \     \____
- \___  /   \_______  /____|_  /_______  /\____|__  /_______  /|___|\______  /
-     \/            \/       \/        \/         \/        \/             \/
 
 .___ ___________   _______________ ____________________.___  ________    ________________________ __________
 |   |\      \   \ /   /\_   _____//   _____/\__    ___/|   |/  _____/   /  _  \__    ___/\_____  \\______   \
@@ -125,7 +178,10 @@ def scanner_loop():
 # =========================
 
 def main():
-    print("[+] CRYSTAL | Investigadora Forense iniciando...")
+    print("\n[ CRYSTAL | IF iniciando... ]")
+
+    if not login():
+        return
 
     threading.Thread(target=banner_loop, daemon=True).start()
     threading.Thread(target=scanner_loop, daemon=True).start()
