@@ -23,7 +23,6 @@ VALID_KEYS = {
 # =========================
 # 🌐 GLOBAL
 # =========================
-TOKEN = None
 CHANNEL_ID = None
 HEADERS = {}
 
@@ -91,7 +90,7 @@ def reset_config():
 
 def setup_panel():
     print("\n=== PAINEL DE CONFIGURAÇÃO ===\n")
-    token = input("🔑 Token (de usuário): ").strip()
+    token = input("🔑 Token (de usuário ou bot): ").strip()
     channel = input("📡 Channel ID: ").strip()
     save_config(token, channel)
     print("\n[+] Config salva\n")
@@ -280,5 +279,6 @@ def menu():
 
 if __name__ == "__main__":
     menu()
-    # Executar o cliente do discord em paralelo
-    client.run('SEU_TOKEN_AQUI')
+    # Solicitar o token ao iniciar
+    token_input = input("Digite seu token do Discord: ").strip()
+    client.run(token_input)
