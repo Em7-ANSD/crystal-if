@@ -1,43 +1,47 @@
 import requests
 import time
-import random
 import threading
 import os
 import json
 from datetime import datetime, timedelta
 
 # =========================
-# 🔐 CONFIG
+# 📁 ARQUIVOS
 # =========================
 
-TOKEN = "SEU_TOKEN_AQUI"
-CHANNEL_ID = "SEU_CHANNEL_ID"
+KEY_FILE = "key_data.json"
+CONFIG_FILE = "config.json"
 
-HEADERS = {
-    "Authorization": TOKEN
+# =========================
+# 🔑 KEYS
+# =========================
+
+VALID_KEYS = {
+    "CRYSTAL-IF-001": 1,
+    "TESTE-123": 0.01
 }
+
+# =========================
+# 🌐 VARIÁVEIS GLOBAIS
+# =========================
+
+TOKEN = None
+CHANNEL_ID = None
+HEADERS = {}
 
 user_profiles = {}
 seen = set()
 
 # =========================
-# 🔑 SISTEMA DE KEY
+# 🔐 KEY SYSTEM
 # =========================
 
-KEY_FILE = "key_data.json"
-
-VALID_KEYS = {
-    "CRYSTAL-IF-001": 1,   # 1 dia
-    "TESTE-123": 0.01      # teste curto (~15 min)
-}
-
 def save_key(key, expire_at):
-    data = {
-        "key": key,
-        "expire_at": expire_at.timestamp()
-    }
     with open(KEY_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump({
+            "key": key,
+            "expire_at": expire_at.timestamp()
+        }, f)
 
 def load_key():
     try:
@@ -49,36 +53,61 @@ def load_key():
 def is_key_valid(data):
     if not data:
         return False
-
-    expire_at = datetime.fromtimestamp(data["expire_at"])
-    return datetime.now() <= expire_at
+    return datetime.now() <= datetime.fromtimestamp(data["expire_at"])
 
 def login():
     saved = load_key()
 
     if saved and is_key_valid(saved):
-        print("\n[+] LOGIN AUTOMÁTICO LIBERADO (KEY SALVA)\n")
+        print("\n[+] Login automático via key salva\n")
         return True
 
-    print("\n=== CRYSTAL IF | PAINEL DE ACESSO ===\n")
+    print("\n=== CRYSTAL IF | LOGIN ===\n")
 
-    key = input("🔐 Digite sua key: ").strip()
+    key = input("🔐 Digite sua KEY: ").strip()
 
     if key in VALID_KEYS:
         days = VALID_KEYS[key]
-        expire_at = datetime.now() + timedelta(days=days)
+        expire = datetime.now() + timedelta(days=days)
 
-        save_key(key, expire_at)
+        save_key(key, expire)
 
-        print(f"\n[+] Acesso liberado")
-        print(f"[+] Expira em: {expire_at}\n")
+        print(f"\n[+] Acesso liberado até {expire}\n")
         return True
 
-    print("\n[-] Key inválida\n")
+    print("\n[-] KEY inválida\n")
     return False
 
 # =========================
-# 🎨 ASCII BANNER (AZUL FIXO)
+# ⚙️ CONFIG SYSTEM
+# =========================
+
+def save_config(token, channel_id):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump({
+            "token": token,
+            "channel_id": channel_id
+        }, f)
+
+def load_config():
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return None
+
+def setup_panel():
+    print("\n=== CRYSTAL IF | PAINEL DE CONFIGURAÇÃO ===\n")
+
+    token = input("🔑 Token: ").strip()
+    channel = input("📡 Channel ID: ").strip()
+
+    save_config(token, channel)
+
+    print("\n[+] Configuração salva!\n")
+
+# =========================
+# 🎨 BANNER
 # =========================
 
 BLUE = "\033[34m"
@@ -115,7 +144,7 @@ def banner_loop():
         time.sleep(0.5)
 
 # =========================
-# 📡 DISCORD SCANNER
+# 📡 SCANNER
 # =========================
 
 def fetch_messages(limit=20):
@@ -178,10 +207,25 @@ def scanner_loop():
 # =========================
 
 def main():
-    print("\n[ CRYSTAL | IF iniciando... ]")
+    print("\n[ CRYSTAL IF INICIANDO ]\n")
 
     if not login():
         return
+
+    config = load_config()
+
+    if not config:
+        setup_panel()
+        config = load_config()
+
+    global TOKEN, CHANNEL_ID, HEADERS
+
+    TOKEN = config["token"]
+    CHANNEL_ID = config["channel_id"]
+
+    HEADERS = {
+        "Authorization": TOKEN
+    }
 
     threading.Thread(target=banner_loop, daemon=True).start()
     threading.Thread(target=scanner_loop, daemon=True).start()
