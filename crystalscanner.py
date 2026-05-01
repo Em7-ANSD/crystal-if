@@ -1,6 +1,5 @@
 import requests
 import time
-import random
 import threading
 import os
 
@@ -19,11 +18,10 @@ user_profiles = {}
 seen = set()
 
 # =========================
-# 🎨 ASCII BANNER
+# 🎨 ASCII BANNER (AZUL ESCURO FIXO)
 # =========================
 
-RED = "\033[91m"
-WHITE = "\033[97m"
+BLUE = "\033[34m"
 RESET = "\033[0m"
 
 art = r"""
@@ -56,21 +54,12 @@ ___________________ _____________________ _______    _________.____________
             \/                 \/        \/                        \/         \/                 \/       \/
 """
 
-def colorize(text):
-    out = ""
-    for ch in text:
-        if ch != " ":
-            out += random.choice([RED, WHITE]) + ch
-        else:
-            out += " "
-    return out + RESET
-
 def banner_loop():
     while True:
         os.system("clear")
-        print(colorize(art))
+        print(BLUE + art + RESET)
         print("\n[ CRYSTAL | IF - SCANNER ONLINE ]\n")
-        time.sleep(0.2)
+        time.sleep(0.5)
 
 # =========================
 # 📡 DISCORD SCANNER
@@ -136,7 +125,7 @@ def scanner_loop():
 # =========================
 
 def main():
-    print("[+] CRYSTAL | Investigadora Forense do Discord iniciando...")
+    print("[+] CRYSTAL | Investigadora Forense iniciando...")
 
     threading.Thread(target=banner_loop, daemon=True).start()
     threading.Thread(target=scanner_loop, daemon=True).start()
