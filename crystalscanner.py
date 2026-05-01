@@ -234,10 +234,10 @@ def make_layout():
     return layout
 
 def run_dashboard():
-    with Live(make_layout(), refresh_per_second=4, screen=True):
+    with Live(refresh_per_second=4, screen=True) as live:
         while True:
+            live.update(make_layout())
             time.sleep(0.5)
-            # Atualiza a tela continuamente
 
 # =========================
 # Função principal
