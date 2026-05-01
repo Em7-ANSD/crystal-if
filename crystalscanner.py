@@ -10,16 +10,18 @@ import json
 from datetime import datetime, timedelta
 import requests
 import collections
+import sys
+import select
 
 # =========================
-# 📁 FILES
+# FILES
 # =========================
 
 KEY_FILE = "key_data.json"
 CONFIG_FILE = "config.json"
 
 # =========================
-# 🔑 KEYS
+# KEYS
 # =========================
 
 VALID_KEYS = {
@@ -28,7 +30,7 @@ VALID_KEYS = {
 }
 
 # =========================
-# 🌐 GLOBAL
+# GLOBAL
 # =========================
 
 TOKEN = None
@@ -47,26 +49,16 @@ console = Console()
 class RiskEngine:
     def __init__(self):
         self.users = {}
-        self.time_window_seconds = 10
 
     def process_message(self, user_id, content):
-        now = datetime.now()
-        user = self.users.get(user_id, {"msgs": [], "risk": 0})
+        user = self.users.get(user_id, {"count": 0, "risk": 0})
+        user["count"] += 1
 
-        user["msgs"].append((now, content))
+        if user["count"] > 10:
+            user["risk"] += 1
 
-        recent = [m for m in user["msgs"] if (now - m[0]).total_seconds() < 10]
-        if len(recent) >= 5:
-            user["risk"] += 2
-
-        if len(user["msgs"]) >= 3:
-            last = [m[1] for m in user["msgs"][-3:]]
-            if len(set(last)) == 1:
-                user["risk"] += 3
-
-        user["risk"] = min(user["risk"], 10)
         self.users[user_id] = user
-        return user["risk"]
+        return min(user["risk"], 10)
 
 # =========================
 # Investigation Engine
@@ -102,7 +94,7 @@ class InvestigationEngine:
         return txt
 
 # =========================
-# 🔐 KEY SYSTEM
+# KEY SYSTEM
 # =========================
 
 def save_key(key, expire_at):
@@ -209,7 +201,6 @@ def scanner_loop():
 
                 messages.append({
                     "time": now.strftime("%H:%M:%S"),
-                    "id": m["id"],
                     "content": content,
                     "risk": risk,
                     "insights": insights
@@ -220,26 +211,28 @@ def scanner_loop():
 
             time.sleep(2)
 
-        except Exception as e:
-            print("Erro:", e)
+        except:
             time.sleep(2)
 
 # =========================
-# INPUT (FIX)
+# INPUT (SEM BUG)
 # =========================
 
 def comando_input():
     while True:
-        cmd = console.input("[green]>> [/green]")
+        time.sleep(0.1)
 
-        if cmd.startswith("!enviar "):
-            enviar_mensagem_discord(cmd[8:])
+        if select.select([sys.stdin], [], [], 0)[0]:
+            cmd = sys.stdin.readline().strip()
 
-        elif cmd == "!relatorio":
-            console.print(investigation_engine.generate_report())
+            if cmd.startswith("!enviar "):
+                enviar_mensagem_discord(cmd[8:])
 
-        elif cmd == "!sair":
-            os._exit(0)
+            elif cmd == "!relatorio":
+                console.print(investigation_engine.generate_report())
+
+            elif cmd == "!sair":
+                os._exit(0)
 
 # =========================
 # UI
@@ -253,7 +246,7 @@ def make_layout():
         Layout(name="footer", size=3)
     )
 
-    layout["header"].update(Panel("CRYSTAL SCANNER"))
+    layout["header"].update(Panel("CRYSTAL FORENSIC SCANNER"))
 
     table = Table(expand=True)
     table.add_column("Hora")
@@ -264,14 +257,13 @@ def make_layout():
         table.add_row(m["time"], m["content"], str(m["risk"]))
 
     layout["body"].update(Panel(table))
-    layout["footer"].update(Panel("!relatorio | !enviar | !sair"))
+    layout["footer"].update(Panel("Comandos: !relatorio | !enviar | !sair"))
 
     return layout
 
 def run_dashboard():
-    with Live(refresh_per_second=2, transient=False) as live:
+    with Live(make_layout(), refresh_per_second=2):
         while True:
-            live.update(make_layout(), refresh=True)
             time.sleep(0.5)
 
 # =========================
