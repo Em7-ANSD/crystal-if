@@ -4,6 +4,7 @@ import threading
 import os
 import json
 from datetime import datetime, timedelta
+from dateutil.parser import parse
 
 # =========================
 # 📁 FILES
@@ -213,8 +214,8 @@ def scanner_loop():
                 uid = m["author"]["id"]
                 content = m.get("content", "")
                 timestamp_str = m["timestamp"]
-                # Converter timestamp para datetime
-                timestamp = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                # Converter timestamp usando dateutil.parser.parse
+                timestamp = parse(timestamp_str)
                 localizacao = m.get("localizacao", "Desconhecido")
                 dispositivo = m.get("dispositivo", "Desconhecido")
 
