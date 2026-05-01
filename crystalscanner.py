@@ -1,8 +1,9 @@
-import requests
-import time
+import curses
 import threading
-import os
+import time
+import requests
 import json
+import os
 from datetime import datetime, timedelta
 
 # =========================
@@ -31,6 +32,7 @@ HEADERS = {}
 
 user_profiles = {}
 seen = set()
+messages = []  # Lista de mensagens recebidas
 
 # =========================
 # 🔐 KEY SYSTEM
@@ -100,12 +102,9 @@ def reset_config():
 
 def setup_panel():
     print("\n=== PAINEL DE CONFIGURAÇÃO ===\n")
-
     token = input("🔑 Token (de usuário): ").strip()
     channel = input("📡 Channel ID: ").strip()
-
     save_config(token, channel)
-
     print("\n[+] Config salva\n")
 
 def test_config(token, channel_id):
@@ -123,7 +122,7 @@ RESET = "\033[0m"
 
 def banner():
     os.system("clear")
-    print(BLUE + "CRYSTAL IF - SCANNER SYSTEM\n" + RESET)
+    print(BLUE + "CRYSTAL IF - HACKER PANEL\n" + RESET)
 
 # =========================
 # 📡 SCANNER
@@ -134,88 +133,27 @@ def fetch_messages(limit=20):
     return requests.get(url, headers=HEADERS).json()
 
 def scanner_loop():
-    global seen
-
-    print("\n[+] Scanner iniciado...\n")
-
+    global messages, seen
     while True:
         try:
             msgs = fetch_messages()
-
-            # Verifica se a requisição foi bem-sucedida
             if not isinstance(msgs, list):
-                print("Erro ao buscar mensagens ou nenhuma mensagem retornada.")
                 time.sleep(3)
                 continue
-
             for m in msgs:
                 if m["id"] in seen:
                     continue
-
                 seen.add(m["id"])
-
                 uid = m["author"]["id"]
                 content = m.get("content", "")
-
-                # Mostra mensagem em tempo real
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] {uid} | {content}")
-
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                messages.append(f"{timestamp} {uid}: {content}")
             time.sleep(3)
-        except Exception as e:
-            print(f"Erro no scanner: {e}")
+        except:
             time.sleep(3)
 
 # =========================
-# 🚀 START SCANNER SAFE
-# =========================
-
-def start_scanner():
-    global TOKEN, CHANNEL_ID, HEADERS
-
-    config = load_config()
-
-    if not config:
-        print("\n[-] Nenhuma config encontrada\n")
-        setup_panel()
-        config = load_config()
-
-    # valida config antes de rodar
-    if not test_config(config["token"], config["channel_id"]):
-        print("\n[-] Config inválida ou token quebrado\n")
-        setup_panel()
-        config = load_config()
-
-    TOKEN = config["token"]
-    CHANNEL_ID = config["channel_id"]
-    HEADERS = {"Authorization": TOKEN}
-
-    # Thread do scanner
-    threading.Thread(target=scanner_loop, daemon=True).start()
-
-    # Thread do comando de envio de mensagem
-    threading.Thread(target=comando_input, daemon=True).start()
-
-    # Mantém o programa rodando
-    while True:
-        time.sleep(1)
-
-# =========================
-# 🧠 Thread de comando para enviar mensagem enquanto o scanner roda
-# =========================
-
-def comando_input():
-    while True:
-        cmd = input()
-        if cmd.startswith("!enviar "):
-            mensagem = cmd[len("!enviar "):]
-            enviar_mensagem_discord(mensagem)
-        elif cmd.lower() == "!sair":
-            print("Encerrando comando input...")
-            break
-        # Você pode acrescentar outros comandos aqui
-
-# =========================
-# 📝 Função para enviar mensagem ao Discord
+# Enviar mensagem
 # =========================
 
 def enviar_mensagem_discord(mensagem):
@@ -229,50 +167,102 @@ def enviar_mensagem_discord(mensagem):
         "content": mensagem
     }
     r = requests.post(url, headers=headers, json=data)
-    if r.status_code in [200, 201]:
-        print("Mensagem enviada com sucesso!")
-    else:
-        print(f"Erro ao enviar mensagem: {r.status_code}")
-        print(r.text)
+    return r.status_code in [200, 201]
 
 # =========================
-# 📋 MENU PRINCIPAL
+# Interface curses
 # =========================
 
-def menu():
+def run_dashboard(stdscr):
+    global messages
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+    height, width = stdscr.getmaxyx()
+
     while True:
-        banner()
+        stdscr.clear()
 
-        print("[1] Start Scanner")
-        print("[2] Reset Config")
-        print("[3] Login Key")
-        print("[4] Sair")
-        print("\nDigite '!enviar Sua mensagem' para enviar uma mensagem ao Discord enquanto o scanner roda.")
-        print("Digite '!sair' no comando de entrada para parar a entrada de comandos.\n")
+        # Banner
+        stdscr.addstr(0, 2, "🖥️  CRYSTAL IF - HACKER PANEL", curses.A_BOLD)
 
-        op = input(">> ").strip()
+        # Status
+        stdscr.addstr(2, 2, "[*] Scanner: Ativo", curses.color_pair(2))
+        stdscr.addstr(3, 2, f"[*] Mensagens recebidas: {len(messages)}")
 
-        if op == "1":
-            if login():
-                start_scanner()
+        # Últimas mensagens
+        stdscr.addstr(5, 2, "Últimas mensagens:")
+        for i, msg in enumerate(messages[-10:]):
+            if 6 + i < height - 4:
+                stdscr.addstr(6 + i, 4, msg[:width - 8])
 
-        elif op == "2":
-            reset_config()
+        # Instruções
+        stdscr.addstr(height - 3, 2, "Comando: (use '!enviar mensagem' ou '!sair')", curses.A_BOLD)
 
-        elif op == "3":
-            login()
+        stdscr.refresh()
 
-        elif op == "4":
-            print("\nSaindo...\n")
+        try:
+            key = stdscr.getkey()
+            if key == 'q':
+                break
+        except:
+            pass
+        time.sleep(0.5)
+
+# Thread de entrada de comandos
+def command_input(stdscr):
+    global TOKEN, CHANNEL_ID
+    while True:
+        curses.echo()
+        stdscr.addstr(curses.LINES - 2, 2, "Digite comando: ")
+        stdscr.clrtoeol()
+        cmd = stdscr.getstr(curses.LINES - 2, 18).decode('utf-8')
+        curses.noecho()
+
+        if cmd.startswith("!enviar "):
+            mensagem = cmd[len("!enviar "):]
+            sucesso = enviar_mensagem_discord(mensagem)
+            if sucesso:
+                messages.append(f"{datetime.now().strftime('%H:%M:%S')} [Você]: {mensagem}")
+        elif cmd.lower() == "!sair":
             break
-
-        else:
-            print("\nOpção inválida\n")
-            time.sleep(1)
+        time.sleep(0.1)
 
 # =========================
-# 🚀 MAIN
+# Main
 # =========================
+
+def main():
+    global TOKEN, CHANNEL_ID, HEADERS, seen, messages
+
+    # Carregar ou configurar
+    config = load_config()
+    if not config:
+        print("\n[-] Nenhuma config encontrada\n")
+        setup_panel()
+        config = load_config()
+
+    if not test_config(config["token"], config["channel_id"]):
+        print("\n[-] Config inválida ou token quebrado\n")
+        setup_panel()
+        config = load_config()
+
+    TOKEN = config["token"]
+    CHANNEL_ID = config["channel_id"]
+    HEADERS = {"Authorization": TOKEN}
+    seen = set()
+    messages = []
+
+    # Inicia thread do scanner
+    threading.Thread(target=scanner_loop, daemon=True).start()
+
+    # Inicia curses
+    curses.wrapper(run_curses)
+
+def run_curses(stdscr):
+    # Thread do painel
+    threading.Thread(target=run_dashboard, args=(stdscr,), daemon=True).start()
+    # Thread de comandos
+    command_input(stdscr)
 
 if __name__ == "__main__":
-    menu()
+    main()
