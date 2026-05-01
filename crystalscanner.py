@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 
 # =========================
-# 📁 ARQUIVOS
+# 📁 FILES
 # =========================
 
 KEY_FILE = "key_data.json"
@@ -22,7 +22,7 @@ VALID_KEYS = {
 }
 
 # =========================
-# 🌐 VARIÁVEIS GLOBAIS
+# 🌐 GLOBAL
 # =========================
 
 TOKEN = None
@@ -59,20 +59,17 @@ def login():
     saved = load_key()
 
     if saved and is_key_valid(saved):
-        print("\n[+] Login automático via key salva\n")
+        print("\n[+] Login automático via KEY salva\n")
         return True
 
     print("\n=== CRYSTAL IF | LOGIN ===\n")
-
-    key = input("🔐 Digite sua KEY: ").strip()
+    key = input("🔐 Key: ").strip()
 
     if key in VALID_KEYS:
-        days = VALID_KEYS[key]
-        expire = datetime.now() + timedelta(days=days)
-
+        expire = datetime.now() + timedelta(days=VALID_KEYS[key])
         save_key(key, expire)
 
-        print(f"\n[+] Acesso liberado até {expire}\n")
+        print("\n[+] Acesso liberado\n")
         return True
 
     print("\n[-] KEY inválida\n")
@@ -96,15 +93,27 @@ def load_config():
     except:
         return None
 
+def reset_config():
+    if os.path.exists(CONFIG_FILE):
+        os.remove(CONFIG_FILE)
+    print("\n[+] Config resetada\n")
+
 def setup_panel():
-    print("\n=== CRYSTAL IF | PAINEL DE CONFIGURAÇÃO ===\n")
+    print("\n=== PAINEL DE CONFIGURAÇÃO ===\n")
 
     token = input("🔑 Token: ").strip()
     channel = input("📡 Channel ID: ").strip()
 
     save_config(token, channel)
 
-    print("\n[+] Configuração salva!\n")
+    print("\n[+] Config salva\n")
+
+def test_config(token, channel_id):
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1"
+    headers = {"Authorization": token}
+
+    r = requests.get(url, headers=headers)
+    return r.status_code == 200
 
 # =========================
 # 🎨 BANNER
@@ -113,35 +122,9 @@ def setup_panel():
 BLUE = "\033[34m"
 RESET = "\033[0m"
 
-art = r"""
-______________________.___. _________________________  .____
-\_   ___ \______   \__  |   |/   _____/\__    ___/  _  \ |    |
-/    \  \/|       _//   |   |\_____  \   |    | /  /_\  \|    |
-\     \___|    |   \\____   |/        \  |    |/    |    \    |___
- \______  /____|_  // ______/_______  /  |____|\____|__  /_______ \
-        \/       \/ \/              \/                 \/        \/
-
-________  .___  ________.___________________  .____
-\______ \ |   |/  _____/|   \__    ___/  _  \ |    |
- |    |  \|   /   \  ___|   | |    | /  /_\  \|    |
- |    `   \   \    \_\  \   | |    |/    |    \    |___
-/_______  /___|\______  /___| |____|\____|__  /_______ \
-        \/            \/                    \/        \/
-
-.___ ___________   _______________ ____________________.___  ________    ________________________ __________
-|   |\      \   \ /   /\_   _____//   _____/\__    ___/|   |/  _____/   /  _  \__    ___/\_____  \\______   \
-|   |/   |   \   Y   /  |    __)_ \_____  \   |    |   |   /   \  ___  /  /_\  \|    |    /   |   \|       _/
-|   /    |    \     /   |        \/        \  |    |   |   \    \_\  \/    |    \    |   /    |    \    |   \
-|___\____|__  /\___/   /_______  /_______  /  |____|   |___|\______  /\____|__  /____|   \_______  /____|_  /
-            \/                 \/        \/                        \/         \/                 \/       \/
-"""
-
-def banner_loop():
-    while True:
-        os.system("clear")
-        print(BLUE + art + RESET)
-        print("\n[ CRYSTAL | IF - SCANNER ONLINE ]\n")
-        time.sleep(0.5)
+def banner():
+    os.system("clear")
+    print(BLUE + "CRYSTAL IF - SCANNER SYSTEM\n" + RESET)
 
 # =========================
 # 📡 SCANNER
@@ -149,39 +132,12 @@ def banner_loop():
 
 def fetch_messages(limit=20):
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit={limit}"
-    r = requests.get(url, headers=HEADERS)
-
-    if r.status_code != 200:
-        print("Erro:", r.status_code)
-        return []
-
-    return r.json()
-
-def analyze(content):
-    flags = []
-    c = content.lower()
-
-    if len(c) > 200:
-        flags.append("LONG")
-
-    if c.count("!") > 5:
-        flags.append("SPAM")
-
-    return flags
-
-def update(uid, flags):
-    if uid not in user_profiles:
-        user_profiles[uid] = {"count": 0, "flags": []}
-
-    user_profiles[uid]["count"] += 1
-    user_profiles[uid]["flags"].extend(flags)
-
-def risk(uid):
-    p = user_profiles.get(uid, {})
-    return min(len(p.get("flags", [])) * 5 + p.get("count", 0), 100)
+    return requests.get(url, headers=HEADERS).json()
 
 def scanner_loop():
     global seen
+
+    print("\n[+] Scanner iniciado...\n")
 
     while True:
         msgs = fetch_messages()
@@ -195,43 +151,76 @@ def scanner_loop():
             uid = m["author"]["id"]
             content = m.get("content", "")
 
-            flags = analyze(content)
-            update(uid, flags)
-
-            print(f"{uid} | risk={risk(uid)} | {content[:40]}")
+            print(f"{uid} | {content[:50]}")
 
         time.sleep(3)
 
 # =========================
-# 🚀 MAIN
+# 🚀 START SCANNER SAFE
 # =========================
 
-def main():
-    print("\n[ CRYSTAL IF INICIANDO ]\n")
-
-    if not login():
-        return
+def start_scanner():
+    global TOKEN, CHANNEL_ID, HEADERS
 
     config = load_config()
 
     if not config:
+        print("\n[-] Nenhuma config encontrada\n")
         setup_panel()
         config = load_config()
 
-    global TOKEN, CHANNEL_ID, HEADERS
+    # valida config antes de rodar
+    if not test_config(config["token"], config["channel_id"]):
+        print("\n[-] Config inválida ou token quebrado\n")
+        setup_panel()
+        config = load_config()
 
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
 
-    HEADERS = {
-        "Authorization": TOKEN
-    }
+    HEADERS = {"Authorization": TOKEN}
 
-    threading.Thread(target=banner_loop, daemon=True).start()
     threading.Thread(target=scanner_loop, daemon=True).start()
 
     while True:
         time.sleep(1)
 
+# =========================
+# 📋 MENU PRINCIPAL
+# =========================
+
+def menu():
+    while True:
+        banner()
+
+        print("[1] Start Scanner")
+        print("[2] Reset Config")
+        print("[3] Login Key")
+        print("[4] Exit\n")
+
+        op = input(">> ").strip()
+
+        if op == "1":
+            if login():
+                start_scanner()
+
+        elif op == "2":
+            reset_config()
+
+        elif op == "3":
+            login()
+
+        elif op == "4":
+            print("\nSaindo...\n")
+            break
+
+        else:
+            print("\nOpção inválida\n")
+            time.sleep(1)
+
+# =========================
+# 🚀 MAIN
+# =========================
+
 if __name__ == "__main__":
-    main()
+    menu()
