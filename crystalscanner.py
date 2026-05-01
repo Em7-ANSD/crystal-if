@@ -1,4 +1,6 @@
-import discord
+import requests
+import time
+import threading
 import os
 import json
 from datetime import datetime, timedelta
@@ -7,7 +9,7 @@ from datetime import datetime, timedelta
 # 📁 FILES
 # =========================
 
-KEY_FILE = "key.json"
+KEY_FILE = "key_data.json"
 CONFIG_FILE = "config.json"
 
 # =========================
@@ -16,39 +18,29 @@ CONFIG_FILE = "config.json"
 
 VALID_KEYS = {
     "CRYSTAL-IF-001": 1,
-    "TESTE-123": 1
+    "TESTE-123": 0.01
 }
 
 # =========================
-# 🧠 STATE
+# 🌐 GLOBAL
 # =========================
 
 TOKEN = None
-CHANNELS = []
+CHANNEL_ID = None
+HEADERS = {}
 
-# =========================
-# 🎨 ASCII
-# =========================
-
-ASCII = r"""
-  ______     ______     __  __     ______
- /\  ___\   /\  == \   /\ \_\ \   /\  ___\
- \ \ \____  \ \  __<   \ \____ \  \ \___  \
-  \ \_____\  \ \_\ \_\  \/\_____\  \/\_____\
-   \/_____/   \/_/ /_/   \/_____/   \/_____/
-
-        CRYSTAL IF - FORENSIC PANEL
-"""
+user_profiles = {}
+seen = set()
 
 # =========================
 # 🔐 KEY SYSTEM
 # =========================
 
-def save_key(key, expire):
+def save_key(key, expire_at):
     with open(KEY_FILE, "w") as f:
         json.dump({
             "key": key,
-            "expire": expire.timestamp()
+            "expire_at": expire_at.timestamp()
         }, f)
 
 def load_key():
@@ -58,38 +50,40 @@ def load_key():
     except:
         return None
 
-def key_valid(data):
+def is_key_valid(data):
     if not data:
         return False
-    return datetime.now().timestamp() < data["expire"]
+    return datetime.now() <= datetime.fromtimestamp(data["expire_at"])
 
-def auth():
-    data = load_key()
+def login():
+    saved = load_key()
 
-    if data and key_valid(data):
-        print("[+] Auto-login OK\n")
+    if saved and is_key_valid(saved):
+        print("\n[+] Login automático via KEY salva\n")
         return True
 
-    key = input("Key: ").strip()
+    print("\n=== CRYSTAL IF | LOGIN ===\n")
+    key = input("🔐 Key: ").strip()
 
     if key in VALID_KEYS:
         expire = datetime.now() + timedelta(days=VALID_KEYS[key])
         save_key(key, expire)
-        print("[+] Key aceita\n")
+
+        print("\n[+] Acesso liberado\n")
         return True
 
-    print("[-] Key inválida\n")
+    print("\n[-] KEY inválida\n")
     return False
 
 # =========================
-# ⚙️ CONFIG
+# ⚙️ CONFIG SYSTEM
 # =========================
 
-def save_config(token, channels):
+def save_config(token, channel_id):
     with open(CONFIG_FILE, "w") as f:
         json.dump({
             "token": token,
-            "channels": channels
+            "channel_id": channel_id
         }, f)
 
 def load_config():
@@ -99,104 +93,133 @@ def load_config():
     except:
         return None
 
-def setup():
-    print("\n=== Configuração Inicial ===")
-    token = input("Digite seu Token de Conta (Selfbot): ").strip()
-    canais_input = input("Digite os IDs dos canais, separados por vírgula: ").strip()
-    canais = [int(c.strip()) for c in canais_input.split(",") if c.strip().isdigit()]
-
-    save_config(token, canais)
-    print("[+] Configuração salva!\n")
-
-def reset():
+def reset_config():
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
-    print("[+] Config resetada\n")
+    print("\n[+] Config resetada\n")
+
+def setup_panel():
+    print("\n=== PAINEL DE CONFIGURAÇÃO ===\n")
+
+    token = input("🔑 Token (de usuário): ").strip()
+    channel = input("📡 Channel ID: ").strip()
+
+    save_config(token, channel)
+
+    print("\n[+] Config salva\n")
+
+def test_config(token, channel_id):
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1"
+    headers = {"Authorization": token}
+    r = requests.get(url, headers=headers)
+    return r.status_code == 200
 
 # =========================
-# 🖥 DISPLAY
+# 🎨 BANNER
 # =========================
 
-def display(msg):
+BLUE = "\033[34m"
+RESET = "\033[0m"
+
+def banner():
     os.system("clear")
-    print(ASCII)
-    print("\n━━━━━━━━━━━━━━━━━━━\n")
-    print(f"📡 {msg.channel.id}")
-    print(f"👤 {msg.author}")
-    print(f"💬 {msg.content}")
-    print("\n━━━━━━━━━━━━━━━━━━━\n")
+    print(BLUE + "CRYSTAL IF - SCANNER SYSTEM\n" + RESET)
 
 # =========================
-# 🤖 SELFHOST
+# 📡 SCANNER
 # =========================
 
-intents = discord.Intents.default()
-intents.message_content = True
+def fetch_messages(limit=20):
+    url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit={limit}"
+    return requests.get(url, headers=HEADERS).json()
 
-client = discord.Client(intents=intents)
+def scanner_loop():
+    global seen
 
-@client.event
-async def on_ready():
-    os.system("clear")
-    print(ASCII)
-    print("\n[+] SELFHOST ONLINE\n")
-    print(f"Logged in as: {client.user}")
+    print("\n[+] Scanner iniciado...\n")
 
-@client.event
-async def on_message(message):
-    if CHANNELS and message.channel.id not in CHANNELS:
-        return
+    while True:
+        msgs = fetch_messages()
 
-    display(message)
+        for m in msgs:
+            if m["id"] in seen:
+                continue
+
+            seen.add(m["id"])
+
+            uid = m["author"]["id"]
+            content = m.get("content", "")
+
+            print(f"{uid} | {content[:50]}")
+
+        time.sleep(3)
 
 # =========================
-# 🚀 START
+# 🚀 START SCANNER SAFE
 # =========================
 
-def start():
-    global TOKEN, CHANNELS
+def start_scanner():
+    global TOKEN, CHANNEL_ID, HEADERS
 
     config = load_config()
 
     if not config:
-        setup()
+        print("\n[-] Nenhuma config encontrada\n")
+        setup_panel()
+        config = load_config()
+
+    # valida config antes de rodar
+    if not test_config(config["token"], config["channel_id"]):
+        print("\n[-] Config inválida ou token quebrado\n")
+        setup_panel()
         config = load_config()
 
     TOKEN = config["token"]
-    CHANNELS = config["channels"]
+    CHANNEL_ID = config["channel_id"]
 
-    client.run(TOKEN)  # Aqui, apenas TOKEN, sem argumentos extras
+    # Para selfbot, não colocar "Bot " na autorização, usar o token direto
+    HEADERS = {"Authorization": TOKEN}
+
+    threading.Thread(target=scanner_loop, daemon=True).start()
+
+    while True:
+        time.sleep(1)
 
 # =========================
-# 📋 MENU
+# 📋 MENU PRINCIPAL
 # =========================
 
 def menu():
     while True:
-        os.system("clear")
-        print(ASCII)
-        print("\n[1] Start")
+        banner()
+
+        print("[1] Start Scanner")
         print("[2] Reset Config")
-        print("[3] Key Login")
+        print("[3] Login Key")
         print("[4] Exit\n")
 
-        op = input(">> ")
+        op = input(">> ").strip()
 
         if op == "1":
-            if auth():
-                start()
+            if login():
+                start_scanner()
 
         elif op == "2":
-            reset()
+            reset_config()
 
         elif op == "3":
-            auth()
+            login()
 
         elif op == "4":
+            print("\nSaindo...\n")
             break
 
+        else:
+            print("\nOpção inválida\n")
+            time.sleep(1)
+
 # =========================
-# ▶ START
+# 🚀 MAIN
 # =========================
 
 if __name__ == "__main__":
