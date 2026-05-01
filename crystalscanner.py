@@ -5,27 +5,27 @@ import asyncio
 from datetime import datetime, timedelta
 
 # =========================
-# 🔐 FILES
+# 🔐 ARQUIVOS
 # =========================
 
-KEY_FILE = "key.json"
+KEY_FILE = "chave.json"
 CONFIG_FILE = "config.json"
 
 # =========================
-# 🔑 KEYS (exemplo)
+# 🔑 CHAVES (exemplo)
 # =========================
 
-VALID_KEYS = {
+CHAVES_VALIDAS = {
     "CRYSTAL-IF-001": 1,
     "TESTE-123": 0.01
 }
 
 # =========================
-# 🧠 STATE
+# 🧠 ESTADO
 # =========================
 
 TOKEN = None
-CHANNELS = []
+CANAL_MONITORADOS = []
 
 # =========================
 # 🎨 ASCII
@@ -38,140 +38,141 @@ ASCII = r"""
   \ \_____\  \ \_\ \_\  \/\_____\  \/\_____\    \ \_\  \ \_\ \_\
    \/_____/   \/_/ /_/   \/_____/   \/_____/     \/_/   \/_/\/_/
 
-              CRYSTAL IF - FORENSIC PANEL
+              CRYSTAL IF - PAINEL FORENSE
 """
 
 # =========================
-# 🔐 KEY SYSTEM
+# 🔐 SISTEMA DE CHAVE
 # =========================
 
-def save_key(key, expire):
-    with open(KEY_FILE, "w") as f:
-        json.dump({"key": key, "expire": expire.timestamp()}, f)
+def salvar_chave(chave, expiracao):
+    with open(CHAVE_FILE, "w") as f:
+        json.dump({"chave": chave, "expiracao": expiracao.timestamp()}, f)
 
-def load_key():
+def carregar_chave():
     try:
-        return json.load(open(KEY_FILE))
+        return json.load(open(CHAVE_FILE))
     except:
         return None
 
-def key_valid(data):
-    if not data:
+def chave_valida(dados):
+    if not dados:
         return False
-    return datetime.now().timestamp() < data["expire"]
+    return datetime.now().timestamp() < dados["expiracao"]
 
-def login_key():
-    data = load_key()
+def login_chave():
+    dados = carregar_chave()
 
-    if data and key_valid(data):
-        print("\n[+] Key ativa (auto-login)\n")
+    if dados and chave_valida(dados):
+        print("\n[+] Chave ativa (auto-login)\n")
         return True
 
-    key = input("🔐 Key: ").strip()
+    chave = input("🔐 Chave: ").strip()
 
-    if key in VALID_KEYS:
-        expire = datetime.now() + timedelta(days=VALID_KEYS[key])
-        save_key(key, expire)
-        print("\n[+] Key aceita\n")
+    if chave in CHAVES_VALIDAS:
+        expiracao = datetime.now() + timedelta(days=CHAVES_VALIDAS[chave])
+        salvar_chave(chave, expiracao)
+        print("\n[+] Chave aceita\n")
         return True
 
-    print("\n[-] Key inválida\n")
+    print("\n[-] Chave inválida\n")
     return False
 
 # =========================
-# ⚙️ CONFIG SYSTEM
+# ⚙️ SISTEMA DE CONFIGURAÇÃO
 # =========================
 
-def save_config(token, channels):
+def salvar_config(token, canais):
     with open(CONFIG_FILE, "w") as f:
         json.dump({
             "token": token,
-            "channels": channels
+            "canais": canais
         }, f)
 
-def load_config():
+def carregar_config():
     try:
         return json.load(open(CONFIG_FILE))
     except:
         return None
 
-def reset_config():
+def resetar_config():
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
-    print("\n[+] Config resetada\n")
+    print("\n[+] Configuração resetada\n")
 
-def setup_config():
-    print("\n=== SETUP ===\n")
-    token = input("Bot Token: ").strip()
-    channels = input("Channels (separados por vírgula): ").split(",")
+def configurar():
+    print("\n=== CONFIGURAÇÃO ===\n")
+    token = input("Token do Bot: ").strip()
+    canais = input("Canais (separados por vírgula): ").split(",")
 
-    channels = [int(c.strip()) for c in channels]
+    canais = [int(c.strip()) for c in canais]
 
-    save_config(token, channels)
-    print("\n[+] Config salva\n")
+    salvar_config(token, canais)
+    print("\n[+] Configuração salva\n")
 
 # =========================
 # 🧾 LOGS
 # =========================
 
-def log_msg(channel, author, content):
+def log_mensagem(canal, autor, conteudo):
     os.makedirs("logs", exist_ok=True)
 
-    with open(f"logs/{channel}.log", "a", encoding="utf-8") as f:
-        f.write(f"[{datetime.now()}] {author}: {content}\n")
+    with open(f"logs/{canal}.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now()}] {autor}: {conteudo}\n")
 
 # =========================
 # 🖥 PAINEL
 # =========================
 
-def render(channel, author, content):
+def renderizar(canal, autor, conteudo):
     os.system("clear")
     print(ASCII)
     print("\n━━━━━━━━━━━━━━━━━━━━━━━\n")
-    print(f"📡 Canal: {channel}")
-    print(f"👤 Autor: {author}")
-    print(f"💬 Mensagem:\n{content}")
+    print(f"📡 Canal: {canal}")
+    print(f"👤 Autor: {autor}")
+    print(f"💬 Mensagem:\n{conteudo}")
     print("\n━━━━━━━━━━━━━━━━━━━━━━━\n")
-    print("STATUS: LIVE MONITORING")
+    print("STATUS: MONITORAMENTO AO VIVO")
 
 # =========================
-# 🤖 DISCORD CLIENT
+# 🤖 CLIENTE DISCORD
 # =========================
 
 class SelfBot(discord.Client):
+    def __init__(self):
+        super().__init__(intents=discord.Intents.all())
+
     async def on_ready(self):
         os.system("clear")
         print(ASCII)
         print("\n[+] CRYSTAL IF ONLINE\n")
 
-    async def on_message(self, message):
-        if message.author == self.user:
+    async def on_message(self, mensagem):
+        # Processar apenas mensagens do próprio bot e canais monitorados
+        if mensagem.author != self.user or (CANAL_MONITORADOS and mensagem.channel.id not in CANAL_MONITORADOS):
             return
 
-        if CHANNELS and message.channel.id not in CHANNELS:
-            return
-
-        log_msg(message.channel.id, message.author.name, message.content)
-        render(message.channel.id, message.author.name, message.content)
+        log_mensagem(mensagem.channel.id, mensagem.author.name, mensagem.content)
+        renderizar(mensagem.channel.id, mensagem.author.name, mensagem.content)
 
 # =========================
-# 🚀 START SCANNER
+# 🚀 INICIAR MONITOR
 # =========================
 
-def start():
-    global TOKEN, CHANNELS
+def iniciar_monitor():
+    global TOKEN, CANAL_MONITORADOS
 
-    config = load_config()
+    config = carregar_config()
 
     if not config:
-        setup_config()
-        config = load_config()
+        configurar()
+        config = carregar_config()
 
     TOKEN = config["token"]
-    CHANNELS = config["channels"]
+    CANAL_MONITORADOS = config["canais"]
 
-    client = SelfBot()
-    client.run(TOKEN)
+    cliente = SelfBot()
+    cliente.run(TOKEN, reconnect=True)
 
 # =========================
 # 📋 MENU
@@ -181,31 +182,31 @@ def menu():
     while True:
         os.system("clear")
         print(ASCII)
-        print("\n[1] Start Scanner")
-        print("[2] Reset Config")
-        print("[3] Login Key")
-        print("[4] Exit\n")
+        print("\n[1] Iniciar Monitor")
+        print("[2] Resetar Config")
+        print("[3] Login Chave")
+        print("[4] Sair\n")
 
-        op = input(">> ").strip()
+        opcao = input(">> ").strip()
 
-        if op == "1":
-            if login_key():
-                start()
+        if opcao == "1":
+            if login_chave():
+                iniciar_monitor()
 
-        elif op == "2":
-            reset_config()
+        elif opcao == "2":
+            resetar_config()
 
-        elif op == "3":
-            login_key()
+        elif opcao == "3":
+            login_chave()
 
-        elif op == "4":
+        elif opcao == "4":
             break
 
         else:
             print("Inválido")
 
 # =========================
-# 🚀 MAIN
+# 🚀 PRINCIPAL
 # =========================
 
 if __name__ == "__main__":
