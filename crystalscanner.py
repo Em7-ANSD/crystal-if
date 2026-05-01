@@ -3,25 +3,24 @@ from rich.panel import Panel
 from rich.layout import Layout
 from rich.table import Table
 from rich.console import Console
+from rich.align import Align
+
 import threading
 import time
 import os
 import json
 from datetime import datetime, timedelta
 import requests
-import collections
-import sys
-import select
 
 # =========================
-# FILES
+# 📁 FILES
 # =========================
 
 KEY_FILE = "key_data.json"
 CONFIG_FILE = "config.json"
 
 # =========================
-# KEYS
+# 🔑 KEYS
 # =========================
 
 VALID_KEYS = {
@@ -30,7 +29,7 @@ VALID_KEYS = {
 }
 
 # =========================
-# GLOBAL
+# 🌐 GLOBAL
 # =========================
 
 TOKEN = None
@@ -43,66 +42,12 @@ messages = []
 console = Console()
 
 # =========================
-# Risk Engine
-# =========================
-
-class RiskEngine:
-    def __init__(self):
-        self.users = {}
-
-    def process_message(self, user_id, content):
-        user = self.users.get(user_id, {"count": 0, "risk": 0})
-        user["count"] += 1
-
-        if user["count"] > 10:
-            user["risk"] += 1
-
-        self.users[user_id] = user
-        return min(user["risk"], 10)
-
-# =========================
-# Investigation Engine
-# =========================
-
-class InvestigationEngine:
-    def __init__(self):
-        self.users = {}
-
-    def analyze_message(self, user_id, content, timestamp):
-        insights = []
-
-        if user_id not in self.users:
-            self.users[user_id] = {"count": 0, "last": timestamp}
-
-        self.users[user_id]["count"] += 1
-
-        if self.users[user_id]["count"] > 10:
-            insights.append("Usuário dominante")
-
-        delta = (timestamp - self.users[user_id]["last"]).total_seconds()
-        if delta < 2:
-            insights.append("Envio rápido")
-
-        self.users[user_id]["last"] = timestamp
-
-        return insights
-
-    def generate_report(self):
-        txt = "\n=== RELATÓRIO FORENSE ===\n"
-        for uid, data in self.users.items():
-            txt += f"\nUser {uid} | msgs: {data['count']}\n"
-        return txt
-
-# =========================
-# KEY SYSTEM
+# 🔐 KEY SYSTEM
 # =========================
 
 def save_key(key, expire_at):
     with open(KEY_FILE, "w") as f:
-        json.dump({
-            "key": key,
-            "expire_at": expire_at.timestamp()
-        }, f)
+        json.dump({"key": key, "expire_at": expire_at.timestamp()}, f)
 
 def load_key():
     try:
@@ -136,15 +81,12 @@ def login():
     return False
 
 # =========================
-# CONFIG
+# ⚙️ CONFIG SYSTEM
 # =========================
 
 def save_config(token, channel_id):
     with open(CONFIG_FILE, "w") as f:
-        json.dump({
-            "token": token,
-            "channel_id": channel_id
-        }, f)
+        json.dump({"token": token, "channel_id": channel_id}, f)
 
 def load_config():
     try:
@@ -160,8 +102,8 @@ def reset_config():
 
 def setup_panel():
     print("\n=== CONFIG ===\n")
-    token = input("Token: ").strip()
-    channel = input("Channel ID: ").strip()
+    token = input("🔑 Token: ").strip()
+    channel = input("📡 Channel ID: ").strip()
     save_config(token, channel)
 
 def test_config(token, channel_id):
@@ -171,7 +113,7 @@ def test_config(token, channel_id):
     return r.status_code == 200
 
 # =========================
-# SCANNER
+# 📡 SCANNER
 # =========================
 
 def fetch_messages():
@@ -180,9 +122,11 @@ def fetch_messages():
 
 def scanner_loop():
     global seen, messages
+
     while True:
         try:
             msgs = fetch_messages()
+
             if not isinstance(msgs, list):
                 time.sleep(2)
                 continue
@@ -192,19 +136,16 @@ def scanner_loop():
                     continue
 
                 seen.add(m["id"])
-                uid = m["author"]["id"]
-                content = m.get("content", "")
-                now = datetime.now()
 
-                risk = risk_engine.process_message(uid, content)
-                insights = investigation_engine.analyze_message(uid, content, now)
+                msg_data = {
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "user": m["author"]["id"],
+                    "content": m.get("content", ""),
+                    "risk": 0,
+                    "insights": []
+                }
 
-                messages.append({
-                    "time": now.strftime("%H:%M:%S"),
-                    "content": content,
-                    "risk": risk,
-                    "insights": insights
-                })
+                messages.append(msg_data)
 
                 if len(messages) > 100:
                     messages.pop(0)
@@ -215,49 +156,45 @@ def scanner_loop():
             time.sleep(2)
 
 # =========================
-# INPUT (SEM BUG)
-# =========================
-
-def comando_input():
-    while True:
-        time.sleep(0.1)
-
-        if select.select([sys.stdin], [], [], 0)[0]:
-            cmd = sys.stdin.readline().strip()
-
-            if cmd.startswith("!enviar "):
-                enviar_mensagem_discord(cmd[8:])
-
-            elif cmd == "!relatorio":
-                console.print(investigation_engine.generate_report())
-
-            elif cmd == "!sair":
-                os._exit(0)
-
-# =========================
-# UI
+# 🎨 LAYOUT
 # =========================
 
 def make_layout():
     layout = Layout()
+
     layout.split_column(
         Layout(name="header", size=3),
         Layout(name="body"),
         Layout(name="footer", size=3)
     )
 
-    layout["header"].update(Panel("CRYSTAL FORENSIC SCANNER"))
+    # HEADER
+    layout["header"].update(
+        Panel(Align.center("[bold cyan]🔍 CrystalX Forensic[/bold cyan]"), style="green")
+    )
 
+    # TABLE
     table = Table(expand=True)
-    table.add_column("Hora")
-    table.add_column("Mensagem")
-    table.add_column("Risco")
 
-    for m in messages[-20:]:
-        table.add_row(m["time"], m["content"], str(m["risk"]))
+    table.add_column("Hora", style="cyan")
+    table.add_column("User", style="magenta")
+    table.add_column("Mensagem", style="white")
+    table.add_column("Risco", style="red")
 
-    layout["body"].update(Panel(table))
-    layout["footer"].update(Panel("Comandos: !relatorio | !enviar | !sair"))
+    for msg in messages[-15:]:
+        table.add_row(
+            msg["time"],
+            msg["user"],
+            msg["content"],
+            str(msg["risk"])
+        )
+
+    layout["body"].update(Panel(table, title="Monitoramento"))
+
+    # FOOTER
+    layout["footer"].update(
+        Panel("[yellow]!relatorio | !enviar | !sair[/yellow]")
+    )
 
     return layout
 
@@ -267,52 +204,97 @@ def run_dashboard():
             time.sleep(0.5)
 
 # =========================
-# START
+# 🧠 INPUT THREAD
+# =========================
+
+def comando_input():
+    while True:
+        try:
+            cmd = input()
+
+            if cmd.startswith("!enviar "):
+                enviar_mensagem_discord(cmd[8:])
+
+            elif cmd == "!sair":
+                os._exit(0)
+
+            elif cmd == "!relatorio":
+                print(f"\nTotal mensagens: {len(messages)}\n")
+
+        except:
+            pass
+
+# =========================
+# 📤 ENVIAR MSG
+# =========================
+
+def enviar_mensagem_discord(msg):
+    url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
+
+    requests.post(url, headers={
+        "Authorization": TOKEN,
+        "Content-Type": "application/json"
+    }, json={"content": msg})
+
+# =========================
+# 🚀 START
 # =========================
 
 def start_scanner():
-    global TOKEN, CHANNEL_ID, HEADERS, risk_engine, investigation_engine
+    global TOKEN, CHANNEL_ID, HEADERS
 
     config = load_config()
+
     if not config:
         setup_panel()
         config = load_config()
+
+    if not test_config(config["token"], config["channel_id"]):
+        print("Config inválida")
+        return
 
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
     HEADERS = {"Authorization": TOKEN}
 
-    risk_engine = RiskEngine()
-    investigation_engine = InvestigationEngine()
-
     threading.Thread(target=scanner_loop, daemon=True).start()
     threading.Thread(target=run_dashboard, daemon=True).start()
+    threading.Thread(target=comando_input, daemon=True).start()
 
-    comando_input()
+    while True:
+        time.sleep(1)
 
 # =========================
-# MENU
+# 📋 MENU
 # =========================
 
 def menu():
     while True:
-        print("\n[1] Start Scanner")
+        os.system("clear")
+        print("CRYSTAL IF\n")
+
+        print("[1] Start Scanner")
         print("[2] Reset Config")
         print("[3] Login Key")
-        print("[4] Sair")
+        print("[4] Sair\n")
 
         op = input(">> ")
 
         if op == "1":
             if login():
                 start_scanner()
+
         elif op == "2":
             reset_config()
+
         elif op == "3":
             login()
+
         elif op == "4":
             break
 
+# =========================
+# MAIN
 # =========================
 
 if __name__ == "__main__":
