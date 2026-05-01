@@ -7,28 +7,11 @@ import threading
 import time
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
-import collections
 
 # =========================
-# 📁 FILES
-# =========================
-
-KEY_FILE = "key_data.json"
-CONFIG_FILE = "config.json"
-
-# =========================
-# 🔑 KEYS
-# =========================
-
-VALID_KEYS = {
-    "CRYSTAL-IF-001": 1,
-    "TESTE-123": 0.01
-}
-
-# =========================
-# 🌐 GLOBAL
+# GLOBAL
 # =========================
 
 TOKEN = None
@@ -47,28 +30,16 @@ console = Console()
 class RiskEngine:
     def __init__(self):
         self.users = {}
-        self.time_window_seconds = 10
 
     def process_message(self, user_id, content):
-        now = datetime.now()
-        user = self.users.get(user_id, {"msgs": [], "risk": 0})
+        user = self.users.get(user_id, {"count": 0, "risk": 0})
+        user["count"] += 1
 
-        user["msgs"].append((now, content))
+        if user["count"] > 10:
+            user["risk"] += 1
 
-        # flood
-        recent = [m for m in user["msgs"] if (now - m[0]).total_seconds() < 10]
-        if len(recent) >= 5:
-            user["risk"] += 2
-
-        # spam
-        if len(user["msgs"]) >= 3:
-            last = [m[1] for m in user["msgs"][-3:]]
-            if len(set(last)) == 1:
-                user["risk"] += 3
-
-        user["risk"] = min(user["risk"], 10)
         self.users[user_id] = user
-        return user["risk"]
+        return min(user["risk"], 10)
 
 # =========================
 # Investigation Engine
@@ -77,33 +48,17 @@ class RiskEngine:
 class InvestigationEngine:
     def __init__(self):
         self.activity = {}
-        self.timeline = []
 
     def analyze_message(self, user_id, content, timestamp):
         insights = []
 
         if user_id not in self.activity:
-            self.activity[user_id] = {"count": 0, "last": timestamp}
+            self.activity[user_id] = {"count": 0}
 
-        user = self.activity[user_id]
-        user["count"] += 1
+        self.activity[user_id]["count"] += 1
 
-        if user["count"] > 10:
+        if self.activity[user_id]["count"] > 10:
             insights.append("Usuário dominante")
-
-        delta = (timestamp - user["last"]).total_seconds()
-        if delta < 2:
-            insights.append("Envio rápido")
-
-        user["last"] = timestamp
-
-        self.timeline.append(timestamp)
-        if len(self.timeline) > 15:
-            self.timeline.pop(0)
-
-        if len(self.timeline) >= 10:
-            if (self.timeline[-1] - self.timeline[0]).total_seconds() < 5:
-                insights.append("Pico de atividade")
 
         return insights
 
@@ -117,18 +72,18 @@ class InvestigationEngine:
 # CONFIG
 # =========================
 
-def load_config():
-    try:
-        with open(CONFIG_FILE) as f:
-            return json.load(f)
-    except:
-        return None
-
 def setup():
     token = input("Token: ")
     channel = input("Channel ID: ")
-    with open(CONFIG_FILE, "w") as f:
+    with open("config.json", "w") as f:
         json.dump({"token": token, "channel_id": channel}, f)
+
+def load():
+    try:
+        with open("config.json") as f:
+            return json.load(f)
+    except:
+        return None
 
 # =========================
 # SCANNER
@@ -197,15 +152,15 @@ def layout():
         table.add_row(m["time"], m["msg"], str(m["risk"]))
 
     lay["mid"].update(Panel(table))
-
-    lay["bot"].update(Panel("!relatorio"))
+    lay["bot"].update(Panel("Digite !relatorio"))
 
     return lay
 
 def dashboard():
-    with Live(refresh_per_second=4, screen=True) as live:
+    # 🔥 SEM screen=True (corrigido)
+    with Live(refresh_per_second=4) as live:
         while True:
-            live.update(layout())
+            live.update(layout(), refresh=True)
             time.sleep(0.5)
 
 # =========================
@@ -225,10 +180,10 @@ def cmd():
 def start():
     global TOKEN, CHANNEL_ID, HEADERS, risk_engine, investigation_engine
 
-    cfg = load_config()
+    cfg = load()
     if not cfg:
         setup()
-        cfg = load_config()
+        cfg = load()
 
     TOKEN = cfg["token"]
     CHANNEL_ID = cfg["channel_id"]
