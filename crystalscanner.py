@@ -4,6 +4,8 @@ import threading
 import os
 import json
 from datetime import datetime, timedelta
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # =========================
 # 📁 FILES
@@ -133,8 +135,52 @@ def fetch_messages(limit=20):
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit={limit}"
     return requests.get(url, headers=HEADERS).json()
 
+# =========================
+# Novo: armazenamento de metadados
+# =========================
+
+metadados = []
+
+def analisar_metadados():
+    if not metadados:
+        print("Nenhum dado de metadados para analisar ainda.")
+        return
+    
+    df = pd.DataFrame(metadados)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df['hora'] = df['timestamp'].dt.hour
+
+    # Distribuição de atividades por hora
+    atividades_por_hora = df['hora'].value_counts().sort_index()
+    print("\nDistribuição de atividades por hora:")
+    print(atividades_por_hora)
+
+    # Plotar gráfico
+    plt.figure(figsize=(10,6))
+    atividades_por_hora.plot(kind='bar')
+    plt.title('Atividades por Hora')
+    plt.xlabel('Hora do dia')
+    plt.ylabel('Número de mensagens')
+    plt.show()
+
+    # Atividades fora do horário (exemplo: 8h às 22h)
+    horarios_atipicos = df[(df['hora'] < 8) | (df['hora'] > 22)]
+    print("\nAtividades fora do horário normal:")
+    print(horarios_atipicos)
+
+    # Mudanças de localização
+    locais_unicos = df['localizacao'].unique()
+    if len(locais_unicos) > 1:
+        print(f"\nMudanças de localização detectadas: {locais_unicos}")
+    else:
+        print("\nSem mudanças de localização detectadas.")
+
+    # Dispositivos utilizados
+    dispositivos_unicos = df['dispositivo'].unique()
+    print(f"\nDispositivos utilizados: {dispositivos_unicos}")
+
 def scanner_loop():
-    global seen
+    global seen, metadados
 
     print("\n[+] Scanner iniciado...\n")
 
@@ -142,7 +188,6 @@ def scanner_loop():
         try:
             msgs = fetch_messages()
 
-            # Verifica se a requisição foi bem-sucedida
             if not isinstance(msgs, list):
                 print("Erro ao buscar mensagens ou nenhuma mensagem retornada.")
                 time.sleep(3)
@@ -156,9 +201,28 @@ def scanner_loop():
 
                 uid = m["author"]["id"]
                 content = m.get("content", "")
+                timestamp_str = m["timestamp"]
+                # Supondo o formato ISO 8601
+                timestamp = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                # Aqui, se seus dados tiverem esses campos, use-os; se não, deixe como "Desconhecido"
+                localizacao = m.get("localizacao", "Desconhecido")
+                dispositivo = m.get("dispositivo", "Desconhecido")
 
-                # Mostra mensagem em tempo real
+                # Armazenar metadados
+                metadados.append({
+                    "id_mensagem": m["id"],
+                    "user_id": uid,
+                    "content": content,
+                    "timestamp": timestamp,
+                    "localizacao": localizacao,
+                    "dispositivo": dispositivo
+                })
+
+                # Mostrar mensagem em tempo real
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] {uid} | {content}")
+
+            # Análise após cada ciclo
+            analisar_metadados()
 
             time.sleep(3)
         except Exception as e:
@@ -187,8 +251,6 @@ def start_scanner():
 
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
-
-    # Para selfbot, não colocar "Bot " na autorização, usar o token direto
     HEADERS = {"Authorization": TOKEN}
 
     threading.Thread(target=scanner_loop, daemon=True).start()
@@ -203,28 +265,22 @@ def start_scanner():
 def menu():
     while True:
         banner()
-
         print("[1] Start Scanner")
         print("[2] Reset Config")
         print("[3] Login Key")
         print("[4] Exit\n")
-
         op = input(">> ").strip()
 
         if op == "1":
             if login():
                 start_scanner()
-
         elif op == "2":
             reset_config()
-
         elif op == "3":
             login()
-
         elif op == "4":
             print("\nSaindo...\n")
             break
-
         else:
             print("\nOpção inválida\n")
             time.sleep(1)
