@@ -137,15 +137,12 @@ def scanner_loop():
 
                 seen.add(m["id"])
 
-                msg_data = {
+                messages.append({
                     "time": datetime.now().strftime("%H:%M:%S"),
                     "user": m["author"]["id"],
                     "content": m.get("content", ""),
-                    "risk": 0,
-                    "insights": []
-                }
-
-                messages.append(msg_data)
+                    "risk": 0
+                })
 
                 if len(messages) > 100:
                     messages.pop(0)
@@ -168,12 +165,10 @@ def make_layout():
         Layout(name="footer", size=3)
     )
 
-    # HEADER
     layout["header"].update(
         Panel(Align.center("[bold cyan]🔍 CrystalX Forensic[/bold cyan]"), style="green")
     )
 
-    # TABLE
     table = Table(expand=True)
 
     table.add_column("Hora", style="cyan")
@@ -189,9 +184,8 @@ def make_layout():
             str(msg["risk"])
         )
 
-    layout["body"].update(Panel(table, title="Monitoramento"))
+    layout["body"].update(Panel(table, title="Monitoramento em Tempo Real"))
 
-    # FOOTER
     layout["footer"].update(
         Panel("[yellow]!relatorio | !enviar | !sair[/yellow]")
     )
@@ -199,12 +193,13 @@ def make_layout():
     return layout
 
 def run_dashboard():
-    with Live(make_layout(), refresh_per_second=2):
+    with Live(refresh_per_second=2) as live:
         while True:
+            live.update(make_layout())
             time.sleep(0.5)
 
 # =========================
-# 🧠 INPUT THREAD
+# 🧠 INPUT
 # =========================
 
 def comando_input():
@@ -219,13 +214,13 @@ def comando_input():
                 os._exit(0)
 
             elif cmd == "!relatorio":
-                print(f"\nTotal mensagens: {len(messages)}\n")
+                print(f"\nTotal mensagens capturadas: {len(messages)}\n")
 
         except:
             pass
 
 # =========================
-# 📤 ENVIAR MSG
+# 📤 ENVIAR
 # =========================
 
 def enviar_mensagem_discord(msg):
