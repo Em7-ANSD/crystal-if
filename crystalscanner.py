@@ -201,7 +201,3 @@ def enviar_mensagem_discord(mensagem):
         print(f"Erro ao enviar mensagem: {r.status_code}")
         print(r.text)
 
-# =========================
-# =========================
-# AQUI COMEÇA A PARTE DE COMANDOS DA NOVA VERSÃO (SELF-BOT) QUE VOCÊ ENVIOU
-# =========================
