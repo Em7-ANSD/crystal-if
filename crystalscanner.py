@@ -13,14 +13,15 @@ from datetime import datetime, timedelta
 import requests
 
 # =========================
-# 📁 FILES
+# FILES
 # =========================
 
 KEY_FILE = "key_data.json"
 CONFIG_FILE = "config.json"
+COMMAND_FILE = "cmd.txt"
 
 # =========================
-# 🔑 KEYS
+# KEYS
 # =========================
 
 VALID_KEYS = {
@@ -29,7 +30,7 @@ VALID_KEYS = {
 }
 
 # =========================
-# 🌐 GLOBAL
+# GLOBAL
 # =========================
 
 TOKEN = None
@@ -42,7 +43,7 @@ messages = []
 console = Console()
 
 # =========================
-# 🔐 KEY SYSTEM
+# KEY SYSTEM
 # =========================
 
 def save_key(key, expire_at):
@@ -81,7 +82,7 @@ def login():
     return False
 
 # =========================
-# ⚙️ CONFIG SYSTEM
+# CONFIG SYSTEM
 # =========================
 
 def save_config(token, channel_id):
@@ -113,7 +114,7 @@ def test_config(token, channel_id):
     return r.status_code == 200
 
 # =========================
-# 📡 SCANNER
+# SCANNER
 # =========================
 
 def fetch_messages():
@@ -153,7 +154,34 @@ def scanner_loop():
             time.sleep(2)
 
 # =========================
-# 🎨 LAYOUT
+# CMD.TXT LOOP
+# =========================
+
+def comando_loop():
+    while True:
+        try:
+            if os.path.exists(COMMAND_FILE):
+                with open(COMMAND_FILE, "r") as f:
+                    cmd = f.read().strip()
+
+                os.remove(COMMAND_FILE)
+
+                if cmd.startswith("!enviar "):
+                    enviar_mensagem_discord(cmd[8:])
+
+                elif cmd == "!sair":
+                    os._exit(0)
+
+                elif cmd == "!relatorio":
+                    print(f"\nTotal mensagens: {len(messages)}\n")
+
+        except Exception as e:
+            print("Erro comando:", e)
+
+        time.sleep(1)
+
+# =========================
+# LAYOUT
 # =========================
 
 def make_layout():
@@ -187,7 +215,7 @@ def make_layout():
     layout["body"].update(Panel(table, title="Monitoramento em Tempo Real"))
 
     layout["footer"].update(
-        Panel("[yellow]!relatorio | !enviar | !sair[/yellow]")
+        Panel("[yellow]Use: echo '!comando' > cmd.txt[/yellow]")
     )
 
     return layout
@@ -199,28 +227,7 @@ def run_dashboard():
             time.sleep(0.5)
 
 # =========================
-# 🧠 INPUT
-# =========================
-
-def comando_input():
-    while True:
-        try:
-            cmd = input()
-
-            if cmd.startswith("!enviar "):
-                enviar_mensagem_discord(cmd[8:])
-
-            elif cmd == "!sair":
-                os._exit(0)
-
-            elif cmd == "!relatorio":
-                print(f"\nTotal mensagens capturadas: {len(messages)}\n")
-
-        except:
-            pass
-
-# =========================
-# 📤 ENVIAR
+# ENVIAR
 # =========================
 
 def enviar_mensagem_discord(msg):
@@ -232,7 +239,7 @@ def enviar_mensagem_discord(msg):
     }, json={"content": msg})
 
 # =========================
-# 🚀 START
+# START
 # =========================
 
 def start_scanner():
@@ -254,13 +261,13 @@ def start_scanner():
 
     threading.Thread(target=scanner_loop, daemon=True).start()
     threading.Thread(target=run_dashboard, daemon=True).start()
-    threading.Thread(target=comando_input, daemon=True).start()
+    threading.Thread(target=comando_loop, daemon=True).start()
 
     while True:
         time.sleep(1)
 
 # =========================
-# 📋 MENU
+# MENU
 # =========================
 
 def menu():
