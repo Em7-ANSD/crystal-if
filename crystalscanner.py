@@ -1,0 +1,92 @@
+import requests
+import time
+from datetime import datetime
+
+TOKEN = "COLOQUE_SEU_TOKEN_AQUI"
+CHANNEL_ID = "CHANNEL_ID"
+
+HEADERS = {
+    "Authorization": TOKEN
+}
+
+user_profiles = {}
+
+def fetch_messages(limit=20):
+    url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit={limit}"
+    r = requests.get(url, headers=HEADERS)
+
+    if r.status_code != 200:
+        print("Erro:", r.status_code, r.text)
+        return []
+
+    return r.json()
+
+def extract(msg):
+    return {
+        "id": msg["id"],
+        "content": msg.get("content", ""),
+        "author_id": msg["author"]["id"],
+        "timestamp": msg["timestamp"]
+    }
+
+def analyze(content):
+    flags = []
+    c = content.lower()
+
+    if len(c) > 200:
+        flags.append("LONG")
+
+    if c.count("!") > 5:
+        flags.append("SPAM")
+
+    suspicious_words = ["hack", "senha", "ip", "token"]
+    if any(w in c for w in suspicious_words):
+        flags.append("SENSITIVE")
+
+    return flags
+
+def update(meta, flags):
+    uid = meta["author_id"]
+
+    if uid not in user_profiles:
+        user_profiles[uid] = {"count": 0, "flags": []}
+
+    user_profiles[uid]["count"] += 1
+    user_profiles[uid]["flags"].extend(flags)
+
+def risk(uid):
+    p = user_profiles.get(uid, {})
+    return min(len(p.get("flags", [])) * 5 + p.get("count", 0), 100)
+
+def log(event, details):
+    with open("forensic_log.txt", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now()}] [{event}] {details}\n")
+
+def main():
+    print("[CRYSTAL | IF] Scanner iniciado")
+
+    seen = set()
+
+    while True:
+        messages = fetch_messages()
+
+        for m in messages:
+            if m["id"] in seen:
+                continue
+
+            seen.add(m["id"])
+
+            meta = extract(m)
+            flags = analyze(meta["content"])
+            update(meta, flags)
+
+            uid = meta["author_id"]
+            score = risk(uid)
+
+            print(f"{uid} | score={score} | {meta['content'][:40]}")
+            log("MSG", f"{uid} score={score} flags={flags}")
+
+        time.sleep(5)
+
+if __name__ == "__main__":
+    main()
