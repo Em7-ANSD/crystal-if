@@ -196,13 +196,16 @@ def enviar_mensagem_discord(mensagem):
 
 def comando_input():
     while True:
-        cmd = input()
-        if cmd.startswith("!enviar "):
-            mensagem = cmd[len("!enviar "):]
-            enviar_mensagem_discord(mensagem)
-        elif cmd.lower() == "!sair":
-            print("Encerrando comando input...")
-            os._exit(0)
+        try:
+            cmd = input()
+            if cmd.startswith("!enviar "):
+                mensagem = cmd[len("!enviar "):]
+                enviar_mensagem_discord(mensagem)
+            elif cmd.lower() == "!sair":
+                print("Encerrando comando input...")
+                os._exit(0)
+        except Exception as e:
+            print(f"Erro na entrada de comando: {e}")
 
 # =========================
 # Criar o painel com rich
@@ -261,10 +264,11 @@ def start_scanner():
 
     # Thread do scanner
     threading.Thread(target=scanner_loop, daemon=True).start()
-    # Thread do comando
-    threading.Thread(target=comando_input, daemon=True).start()
-    # Rodar painel
-    run_dashboard()
+    # Thread do painel
+    threading.Thread(target=run_dashboard, daemon=True).start()
+
+    # Aqui fica na thread principal, assim você consegue digitar normalmente
+    comando_input()
 
 # =========================
 # Menu principal
