@@ -166,7 +166,7 @@ def start():
     TOKEN = config["token"]
     CHANNELS = config["channels"]
 
-    client.run(TOKEN, bot=False)  # Importante: bot=False para usar token de usuário
+    client.run(TOKEN)  # Corrigido aqui: sem argumentos extras
 
 # =========================
 # 📋 MENU
