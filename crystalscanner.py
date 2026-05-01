@@ -4,7 +4,6 @@ import threading
 import os
 import json
 from datetime import datetime, timedelta
-from dateutil.parser import parse
 
 # =========================
 # 📁 FILES
@@ -134,65 +133,8 @@ def fetch_messages(limit=20):
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit={limit}"
     return requests.get(url, headers=HEADERS).json()
 
-# =========================
-# Novo: armazenamento de metadados
-# =========================
-
-metadados = []
-
-def analisar_metadados():
-    if not metadados:
-        print("Nenhum dado de metadados para analisar ainda.")
-        return
-    
-    # Converter lista de dicts em manipulação manual
-    # Adicionar uma chave 'hora' para cada item
-    for item in metadados:
-        item['timestamp_obj'] = item['timestamp']
-        # 'timestamp' já é um datetime, se não, converta aqui
-        # item['timestamp_obj'] = datetime.strptime(item['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
-        item['hora'] = item['timestamp_obj'].hour
-
-    # Distribuição de atividades por hora
-    atividades_por_hora = {}
-    for item in metadados:
-        h = item['hora']
-        atividades_por_hora[h] = atividades_por_hora.get(h, 0) + 1
-
-    print("\nDistribuição de atividades por hora:")
-    for hour in sorted(atividades_por_hora):
-        print(f"{hour}:00 - {atividades_por_hora[hour]} mensagens")
-    
-    # Plotagem
-    import matplotlib.pyplot as plt
-    horas = sorted(atividades_por_hora)
-    valores = [atividades_por_hora[h] for h in horas]
-    plt.figure(figsize=(10,6))
-    plt.bar(horas, valores)
-    plt.title('Atividades por Hora')
-    plt.xlabel('Hora do dia')
-    plt.ylabel('Número de mensagens')
-    plt.show()
-
-    # Atividades fora do horário (exemplo: 8h às 22h)
-    horarios_atipicos = [item for item in metadados if item['hora'] < 8 or item['hora'] > 22]
-    print("\nAtividades fora do horário normal:")
-    for at in horarios_atipicos:
-        print(f"{at['timestamp']} - {at['content']}")
-
-    # Mudanças de localização
-    locais_unicos = set(item['localizacao'] for item in metadados)
-    if len(locais_unicos) > 1:
-        print(f"\nMudanças de localização detectadas: {locais_unicos}")
-    else:
-        print("\nSem mudanças de localização detectadas.")
-
-    # Dispositivos utilizados
-    dispositivos_unicos = set(item['dispositivo'] for item in metadados)
-    print(f"\nDispositivos utilizados: {dispositivos_unicos}")
-
 def scanner_loop():
-    global seen, metadados
+    global seen
 
     print("\n[+] Scanner iniciado...\n")
 
@@ -200,6 +142,7 @@ def scanner_loop():
         try:
             msgs = fetch_messages()
 
+            # Verifica se a requisição foi bem-sucedida
             if not isinstance(msgs, list):
                 print("Erro ao buscar mensagens ou nenhuma mensagem retornada.")
                 time.sleep(3)
@@ -213,25 +156,9 @@ def scanner_loop():
 
                 uid = m["author"]["id"]
                 content = m.get("content", "")
-                timestamp_str = m["timestamp"]
-                # Converter timestamp usando dateutil.parser.parse
-                timestamp = parse(timestamp_str)
-                localizacao = m.get("localizacao", "Desconhecido")
-                dispositivo = m.get("dispositivo", "Desconhecido")
 
-                # Armazenar metadados
-                metadados.append({
-                    "id_mensagem": m["id"],
-                    "user_id": uid,
-                    "content": content,
-                    "timestamp": timestamp,
-                    "localizacao": localizacao,
-                    "dispositivo": dispositivo
-                })
-
+                # Mostra mensagem em tempo real
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] {uid} | {content}")
-
-            analisar_metadados()
 
             time.sleep(3)
         except Exception as e:
@@ -252,6 +179,7 @@ def start_scanner():
         setup_panel()
         config = load_config()
 
+    # valida config antes de rodar
     if not test_config(config["token"], config["channel_id"]):
         print("\n[-] Config inválida ou token quebrado\n")
         setup_panel()
@@ -259,6 +187,8 @@ def start_scanner():
 
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
+
+    # Para selfbot, não colocar "Bot " na autorização, usar o token direto
     HEADERS = {"Authorization": TOKEN}
 
     threading.Thread(target=scanner_loop, daemon=True).start()
@@ -267,28 +197,60 @@ def start_scanner():
         time.sleep(1)
 
 # =========================
+# 📝 Função para enviar mensagem ao Discord
+# =========================
+
+def enviar_mensagem_discord(mensagem):
+    global TOKEN, CHANNEL_ID
+    url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
+    headers = {
+        "Authorization": TOKEN,
+        "Content-Type": "application/json"
+    }
+    data = {
+        "content": mensagem
+    }
+    r = requests.post(url, headers=headers, json=data)
+    if r.status_code in [200, 201]:
+        print("Mensagem enviada com sucesso!")
+    else:
+        print(f"Erro ao enviar mensagem: {r.status_code}")
+        print(r.text)
+
+# =========================
 # 📋 MENU PRINCIPAL
 # =========================
 
 def menu():
     while True:
         banner()
+
         print("[1] Start Scanner")
         print("[2] Reset Config")
         print("[3] Login Key")
-        print("[4] Exit\n")
+        print("[4] Enviar mensagem ao Discord")
+        print("[5] Exit\n")
+
         op = input(">> ").strip()
 
         if op == "1":
             if login():
                 start_scanner()
+
         elif op == "2":
             reset_config()
+
         elif op == "3":
             login()
+
         elif op == "4":
+            mensagem = input("Digite a mensagem a enviar: ")
+            enviar_mensagem_discord(mensagem)
+
+        elif op == "5":
             print("\nSaindo...\n")
             break
+
         else:
             print("\nOpção inválida\n")
             time.sleep(1)
