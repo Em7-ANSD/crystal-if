@@ -4,12 +4,17 @@ from rich.layout import Layout
 from rich.table import Table
 from rich.console import Console
 from rich.align import Align
+from rich.text import Text
 
 import threading
 import time
 import os
 import json
+import re
+import hashlib
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
+
 import requests
 
 # =========================
@@ -19,6 +24,45 @@ import requests
 KEY_FILE = "key_data.json"
 CONFIG_FILE = "config.json"
 COMMAND_FILE = "cmd.txt"
+LOG_FILE = "logs.json"
+EVIDENCE_DIR = "evidence"
+
+os.makedirs(EVIDENCE_DIR, exist_ok=True)
+
+# =========================
+# REGEX
+# =========================
+
+REGEX_PATTERNS = {
+    "TOKEN": r"[\w-]{24}\.[\w-]{6}\.[\w-]{27}",
+    "EMAIL": r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+",
+    "IP": r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b",
+    "WEBHOOK": r"https://discord(?:app)?\.com/api/webhooks/\d+/[\w-]+",
+    "URL": r"https?://[^\s]+"
+}
+
+# =========================
+# THREAT WEIGHTS
+# =========================
+
+THREAT_WEIGHTS = {
+    "TOKEN": 70,
+    "WEBHOOK": 60,
+    "IP": 20,
+    "EMAIL": 15,
+    "URL": 10,
+    "SPAM": 25,
+    "WATCHLIST": 80,
+    "MASS_MENTION": 40
+}
+
+# =========================
+# WATCHLIST
+# =========================
+
+WATCHLIST = {
+    "1234567890"
+}
 
 # =========================
 # KEYS
@@ -37,18 +81,40 @@ TOKEN = None
 CHANNEL_ID = None
 HEADERS = {}
 
-seen = set()
-messages = []
-
 console = Console()
+
+seen = set()
+messages = deque(maxlen=300)
+critical_alerts = deque(maxlen=20)
+
+timeline = deque(maxlen=100)
+
+user_stats = defaultdict(lambda: {
+    "messages": 0,
+    "risk_total": 0,
+    "last_messages": deque(maxlen=10),
+    "flags": defaultdict(int)
+})
+
+# =========================
+# UTILS
+# =========================
+
+
+def sha256(data):
+    return hashlib.sha256(data.encode()).hexdigest()
+
 
 # =========================
 # KEY SYSTEM
 # =========================
 
+
 def save_key(key, expire_at):
     with open(KEY_FILE, "w") as f:
         json.dump({"key": key, "expire_at": expire_at.timestamp()}, f)
+
+
 
 def load_key():
     try:
@@ -57,16 +123,21 @@ def load_key():
     except:
         return None
 
+
+
 def is_key_valid(data):
     if not data:
         return False
+
     return datetime.now() <= datetime.fromtimestamp(data["expire_at"])
+
+
 
 def login():
     saved = load_key()
 
     if saved and is_key_valid(saved):
-        print("\n[+] Login automático via KEY salva\n")
+        print("\n[+] Login automático\n")
         return True
 
     print("\n=== CRYSTAL IF | LOGIN ===\n")
@@ -81,13 +152,17 @@ def login():
     print("\n[-] KEY inválida\n")
     return False
 
+
 # =========================
-# CONFIG SYSTEM
+# CONFIG
 # =========================
+
 
 def save_config(token, channel_id):
     with open(CONFIG_FILE, "w") as f:
         json.dump({"token": token, "channel_id": channel_id}, f)
+
+
 
 def load_config():
     try:
@@ -96,34 +171,137 @@ def load_config():
     except:
         return None
 
+
+
 def reset_config():
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
-    print("\n[+] Config resetada\n")
+
+
 
 def setup_panel():
     print("\n=== CONFIG ===\n")
+
     token = input("🔑 Token: ").strip()
     channel = input("📡 Channel ID: ").strip()
+
     save_config(token, channel)
+
+
 
 def test_config(token, channel_id):
     url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1"
-    headers = {"Authorization": token}
-    r = requests.get(url, headers=headers)
+
+    r = requests.get(url, headers={
+        "Authorization": token
+    })
+
     return r.status_code == 200
 
+
 # =========================
-# SCANNER
+# ANALYSIS
 # =========================
+
+
+def analyze_message(content, user_id):
+    risk = 0
+    flags = []
+
+    for flag, pattern in REGEX_PATTERNS.items():
+        if re.search(pattern, content):
+            flags.append(flag)
+            risk += THREAT_WEIGHTS.get(flag, 0)
+
+    if "@everyone" in content or "@here" in content:
+        flags.append("MASS_MENTION")
+        risk += THREAT_WEIGHTS["MASS_MENTION"]
+
+    if user_id in WATCHLIST:
+        flags.append("WATCHLIST")
+        risk += THREAT_WEIGHTS["WATCHLIST"]
+
+    recent = user_stats[user_id]["last_messages"]
+
+    now = time.time()
+
+    recent.append(now)
+
+    recent_msgs = [x for x in recent if now - x < 10]
+
+    if len(recent_msgs) >= 5:
+        flags.append("SPAM")
+        risk += THREAT_WEIGHTS["SPAM"]
+
+    return min(risk, 100), flags
+
+
+# =========================
+# EVIDENCE
+# =========================
+
+
+def save_evidence(data):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    filename = os.path.join(EVIDENCE_DIR, f"evidence_{timestamp}.json")
+
+    evidence = {
+        "hash": sha256(json.dumps(data)),
+        "timestamp": timestamp,
+        "data": data
+    }
+
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(evidence, f, indent=4)
+
+
+# =========================
+# LOGGING
+# =========================
+
+
+def save_log(msg):
+    try:
+        logs = []
+
+        if os.path.exists(LOG_FILE):
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                logs = json.load(f)
+
+        logs.append(msg)
+
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump(logs, f, indent=4)
+
+    except Exception as e:
+        print("Erro log:", e)
+
+
+# =========================
+# DISCORD
+# =========================
+
 
 def fetch_messages():
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit=20"
-    return requests.get(url, headers=HEADERS).json()
+
+    r = requests.get(url, headers=HEADERS)
+
+    if r.status_code == 429:
+        retry = r.json().get("retry_after", 2)
+        time.sleep(retry)
+        return []
+
+    return r.json()
+
+
+# =========================
+# SCANNER LOOP
+# =========================
+
 
 def scanner_loop():
-    global seen, messages
-
     while True:
         try:
             msgs = fetch_messages()
@@ -138,24 +316,88 @@ def scanner_loop():
 
                 seen.add(m["id"])
 
-                messages.append({
+                content = m.get("content", "")
+                user_id = m["author"]["id"]
+
+                risk, flags = analyze_message(content, user_id)
+
+                msg_data = {
+                    "id": m["id"],
                     "time": datetime.now().strftime("%H:%M:%S"),
-                    "user": m["author"]["id"],
-                    "content": m.get("content", ""),
-                    "risk": 0
-                })
+                    "user": user_id,
+                    "content": content,
+                    "risk": risk,
+                    "flags": flags
+                }
 
-                if len(messages) > 100:
-                    messages.pop(0)
+                messages.append(msg_data)
+                save_log(msg_data)
+
+                timeline.appendleft(
+                    f'[{msg_data["time"]}] {user_id}: {content[:40]}'
+                )
+
+                stats = user_stats[user_id]
+
+                stats["messages"] += 1
+                stats["risk_total"] += risk
+
+                for f in flags:
+                    stats["flags"][f] += 1
+
+                if risk >= 60:
+                    critical_alerts.appendleft(msg_data)
+                    save_evidence(msg_data)
+
+                    try:
+                        os.system("printf '\\a'")
+                    except:
+                        pass
 
             time.sleep(2)
 
-        except:
+        except Exception as e:
+            print("Erro scanner:", e)
             time.sleep(2)
 
+
 # =========================
-# CMD.TXT LOOP
+# COMMANDS
 # =========================
+
+
+def export_report():
+    report = {
+        "messages": list(messages),
+        "alerts": list(critical_alerts),
+        "timeline": list(timeline)
+    }
+
+    with open("report.json", "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=4)
+
+
+
+def investigate_user(user_id):
+    console.print(f"\n[bold red]Investigação:[/bold red] {user_id}\n")
+
+    stats = user_stats[user_id]
+
+    console.print(f"Mensagens: {stats['messages']}")
+
+    avg = 0
+
+    if stats['messages']:
+        avg = stats['risk_total'] / stats['messages']
+
+    console.print(f"Risco médio: {avg:.2f}")
+
+    console.print("Flags:")
+
+    for k, v in stats["flags"].items():
+        console.print(f" - {k}: {v}")
+
+
 
 def comando_loop():
     while True:
@@ -166,81 +408,151 @@ def comando_loop():
 
                 os.remove(COMMAND_FILE)
 
-                if cmd.startswith("!enviar "):
-                    enviar_mensagem_discord(cmd[8:])
+                if cmd == "!exportar":
+                    export_report()
+
+                elif cmd.startswith("!investigar "):
+                    investigate_user(cmd.split()[1])
+
+                elif cmd == "!stats":
+                    console.print(f"Mensagens: {len(messages)}")
+                    console.print(f"Alertas: {len(critical_alerts)}")
 
                 elif cmd == "!sair":
                     os._exit(0)
-
-                elif cmd == "!relatorio":
-                    print(f"\nTotal mensagens: {len(messages)}\n")
 
         except Exception as e:
             print("Erro comando:", e)
 
         time.sleep(1)
 
+
 # =========================
-# LAYOUT
+# DASHBOARD
 # =========================
 
-def make_layout():
+
+def make_dashboard():
     layout = Layout()
 
     layout.split_column(
         Layout(name="header", size=3),
-        Layout(name="body"),
+        Layout(name="main"),
         Layout(name="footer", size=3)
     )
 
-    layout["header"].update(
-        Panel(Align.center("[bold cyan]🔍 CrystalX Forensic[/bold cyan]"), style="green")
+    layout["main"].split_row(
+        Layout(name="left"),
+        Layout(name="right", ratio=2)
     )
 
-    table = Table(expand=True)
+    layout["left"].split_column(
+        Layout(name="alerts"),
+        Layout(name="timeline")
+    )
 
-    table.add_column("Hora", style="cyan")
-    table.add_column("User", style="magenta")
-    table.add_column("Mensagem", style="white")
-    table.add_column("Risco", style="red")
+    # HEADER
 
-    for msg in messages[-15:]:
-        table.add_row(
-            msg["time"],
-            msg["user"],
-            msg["content"],
-            str(msg["risk"])
+    layout["header"].update(
+        Panel(
+            Align.center(
+                "[bold cyan]CRYSTAL X FORENSIC SCANNER[/bold cyan]"
+            ),
+            style="green"
+        )
+    )
+
+    # ALERTS
+
+    alert_table = Table(expand=True)
+
+    alert_table.add_column("RISK")
+    alert_table.add_column("USER")
+    alert_table.add_column("FLAGS")
+
+    for a in list(critical_alerts)[:10]:
+        alert_table.add_row(
+            str(a["risk"]),
+            a["user"],
+            ", ".join(a["flags"])
         )
 
-    layout["body"].update(Panel(table, title="Monitoramento em Tempo Real"))
+    layout["alerts"].update(
+        Panel(alert_table, title="Critical Alerts")
+    )
+
+    # TIMELINE
+
+    timeline_text = "\n".join(list(timeline)[:15])
+
+    layout["timeline"].update(
+        Panel(timeline_text, title="Timeline")
+    )
+
+    # MESSAGES
+
+    msg_table = Table(expand=True)
+
+    msg_table.add_column("Hora")
+    msg_table.add_column("User")
+    msg_table.add_column("Mensagem")
+    msg_table.add_column("Risk")
+    msg_table.add_column("Flags")
+
+    for msg in list(messages)[-15:]:
+        risk = msg["risk"]
+
+        style = "green"
+
+        if risk >= 60:
+            style = "red"
+        elif risk >= 30:
+            style = "yellow"
+
+        msg_table.add_row(
+            msg["time"],
+            msg["user"],
+            msg["content"][:50],
+            str(risk),
+            ", ".join(msg["flags"]),
+            style=style
+        )
+
+    layout["right"].update(
+        Panel(msg_table, title="Live Monitoring")
+    )
+
+    # FOOTER
+
+    footer_text = (
+        f"Mensagens: {len(messages)} | "
+        f"Alertas: {len(critical_alerts)} | "
+        f"Users: {len(user_stats)}"
+    )
 
     layout["footer"].update(
-        Panel("[yellow]Use: echo '!comando' > cmd.txt[/yellow]")
+        Panel(footer_text)
     )
 
     return layout
 
+
+# =========================
+# LIVE
+# =========================
+
+
 def run_dashboard():
-    with Live(refresh_per_second=2) as live:
+    with Live(refresh_per_second=2, screen=True) as live:
         while True:
-            live.update(make_layout())
+            live.update(make_dashboard())
             time.sleep(0.5)
 
-# =========================
-# ENVIAR
-# =========================
-
-def enviar_mensagem_discord(msg):
-    url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
-
-    requests.post(url, headers={
-        "Authorization": TOKEN,
-        "Content-Type": "application/json"
-    }, json={"content": msg})
 
 # =========================
 # START
 # =========================
+
 
 def start_scanner():
     global TOKEN, CHANNEL_ID, HEADERS
@@ -257,7 +569,10 @@ def start_scanner():
 
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
-    HEADERS = {"Authorization": TOKEN}
+
+    HEADERS = {
+        "Authorization": TOKEN
+    }
 
     threading.Thread(target=scanner_loop, daemon=True).start()
     threading.Thread(target=run_dashboard, daemon=True).start()
@@ -266,14 +581,17 @@ def start_scanner():
     while True:
         time.sleep(1)
 
+
 # =========================
 # MENU
 # =========================
 
+
 def menu():
     while True:
         os.system("clear")
-        print("CRYSTAL IF\n")
+
+        print("CRYSTAL X FORENSIC\n")
 
         print("[1] Start Scanner")
         print("[2] Reset Config")
@@ -295,9 +613,11 @@ def menu():
         elif op == "4":
             break
 
+
 # =========================
 # MAIN
 # =========================
+
 
 if __name__ == "__main__":
     menu()
