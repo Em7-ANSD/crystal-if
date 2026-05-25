@@ -53,7 +53,8 @@ THREAT_WEIGHTS = {
     "URL": 10,
     "SPAM": 25,
     "WATCHLIST": 80,
-    "MASS_MENTION": 40
+    "MASS_MENTION": 40,
+    "SUSPICIOUS_ATTACHMENT": 40
 }
 
 # =========================
@@ -96,6 +97,32 @@ user_stats = defaultdict(lambda: {
     "flags": defaultdict(int)
 })
 
+# EXTRA GLOBALS
+
+global_threat = 0
+
+user_reputation = defaultdict(lambda: 100)
+
+ai_commentary = deque(maxlen=10)
+
+INCIDENT_MODE = False
+
+metrics = {
+    "messages_per_minute": 0,
+    "alerts_per_minute": 0
+}
+
+message_counter = 0
+alert_counter = 0
+
+SUSPICIOUS_EXT = {
+    ".exe",
+    ".scr",
+    ".bat",
+    ".cmd",
+    ".ps1"
+}
+
 # =========================
 # UTILS
 # =========================
@@ -104,6 +131,176 @@ user_stats = defaultdict(lambda: {
 def sha256(data):
     return hashlib.sha256(data.encode()).hexdigest()
 
+# =========================
+# THREAT ENGINE
+# =========================
+
+
+def calculate_global_threat():
+    global global_threat
+
+    if not critical_alerts:
+        global_threat = max(global_threat - 1, 0)
+        return
+
+    risks = [x["risk"] for x in critical_alerts]
+
+    if risks:
+        global_threat = min(
+            int(sum(risks) / len(risks)),
+            100
+        )
+
+# =========================
+# THREAT BAR
+# =========================
+
+
+def threat_bar():
+    filled = int(global_threat / 10)
+
+    return (
+        "█" * filled +
+        "░" * (10 - filled)
+    )
+
+# =========================
+# REPUTATION SYSTEM
+# =========================
+
+
+def update_reputation(user_id, risk):
+    rep = user_reputation[user_id]
+
+    rep -= int(risk / 10)
+
+    rep = max(min(rep, 100), 0)
+
+    user_reputation[user_id] = rep
+
+# =========================
+# AI COMMENTARY
+# =========================
+
+
+def ai_analyze(msg):
+    content = msg["content"].lower()
+
+    if "nitro" in content and "free" in content:
+        ai_commentary.appendleft(
+            "[AI] Possible Nitro scam detected."
+        )
+
+    if msg["risk"] >= 80:
+        ai_commentary.appendleft(
+            "[AI] Critical threat behavior identified."
+        )
+
+    if "@everyone" in content:
+        ai_commentary.appendleft(
+            "[AI] Mass mention detected."
+        )
+
+    if "http" in content and msg["risk"] >= 40:
+        ai_commentary.appendleft(
+            "[AI] Suspicious link behavior."
+        )
+
+# =========================
+# ATTACHMENT ANALYSIS
+# =========================
+
+
+def analyze_attachments(m):
+    flags = []
+
+    for a in m.get("attachments", []):
+        filename = a["filename"].lower()
+
+        for ext in SUSPICIOUS_EXT:
+            if filename.endswith(ext):
+                flags.append(
+                    "SUSPICIOUS_ATTACHMENT"
+                )
+
+    return flags
+
+# =========================
+# METRICS LOOP
+# =========================
+
+
+def metrics_loop():
+    global message_counter
+    global alert_counter
+
+    while True:
+        metrics["messages_per_minute"] = (
+            message_counter
+        )
+
+        metrics["alerts_per_minute"] = (
+            alert_counter
+        )
+
+        message_counter = 0
+        alert_counter = 0
+
+        time.sleep(60)
+
+# =========================
+# SEARCH SYSTEM
+# =========================
+
+
+def search_messages(term):
+    console.print(
+        f"\n[bold cyan]SEARCH[/bold cyan] {term}\n"
+    )
+
+    found = False
+
+    for msg in messages:
+        if term.lower() in msg["content"].lower():
+            found = True
+
+            console.print(
+                f"[{msg['time']}] "
+                f"{msg['user']} | "
+                f"RISK {msg['risk']} | "
+                f"{msg['content']}"
+            )
+
+    if not found:
+        console.print("Nenhum resultado.")
+
+# =========================
+# EVIDENCE BROWSER
+# =========================
+
+
+def list_evidence():
+    console.print(
+        "\n[bold red]EVIDENCE FILES[/bold red]\n"
+    )
+
+    files = os.listdir(EVIDENCE_DIR)
+
+    if not files:
+        console.print("Nenhuma evidência.")
+        return
+
+    for f in files:
+        console.print(f)
+
+# =========================
+# INCIDENT CONTROL
+# =========================
+
+
+def set_incident(state=True):
+    global INCIDENT_MODE
+    INCIDENT_MODE = state
 
 # =========================
 # KEY SYSTEM
@@ -115,7 +312,6 @@ def save_key(key, expire_at):
         json.dump({"key": key, "expire_at": expire_at.timestamp()}, f)
 
 
-
 def load_key():
     try:
         with open(KEY_FILE, "r") as f:
@@ -124,13 +320,11 @@ def load_key():
         return None
 
 
-
 def is_key_valid(data):
     if not data:
         return False
 
     return datetime.now() <= datetime.fromtimestamp(data["expire_at"])
-
 
 
 def login():
@@ -152,7 +346,6 @@ def login():
     print("\n[-] KEY inválida\n")
     return False
 
-
 # =========================
 # CONFIG
 # =========================
@@ -163,7 +356,6 @@ def save_config(token, channel_id):
         json.dump({"token": token, "channel_id": channel_id}, f)
 
 
-
 def load_config():
     try:
         with open(CONFIG_FILE, "r") as f:
@@ -172,11 +364,9 @@ def load_config():
         return None
 
 
-
 def reset_config():
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
-
 
 
 def setup_panel():
@@ -188,7 +378,6 @@ def setup_panel():
     save_config(token, channel)
 
 
-
 def test_config(token, channel_id):
     url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1"
 
@@ -197,7 +386,6 @@ def test_config(token, channel_id):
     })
 
     return r.status_code == 200
-
 
 # =========================
 # ANALYSIS
@@ -235,7 +423,6 @@ def analyze_message(content, user_id):
 
     return min(risk, 100), flags
 
-
 # =========================
 # EVIDENCE
 # =========================
@@ -254,7 +441,6 @@ def save_evidence(data):
 
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(evidence, f, indent=4)
-
 
 # =========================
 # LOGGING
@@ -277,7 +463,6 @@ def save_log(msg):
     except Exception as e:
         print("Erro log:", e)
 
-
 # =========================
 # DISCORD
 # =========================
@@ -295,13 +480,15 @@ def fetch_messages():
 
     return r.json()
 
-
 # =========================
 # SCANNER LOOP
 # =========================
 
 
 def scanner_loop():
+    global message_counter
+    global alert_counter
+
     while True:
         try:
             msgs = fetch_messages()
@@ -321,6 +508,16 @@ def scanner_loop():
 
                 risk, flags = analyze_message(content, user_id)
 
+                message_counter += 1
+
+                attachment_flags = analyze_attachments(m)
+
+                if attachment_flags:
+                    flags.extend(attachment_flags)
+                    risk += 40
+
+                risk = min(risk, 100)
+
                 msg_data = {
                     "id": m["id"],
                     "time": datetime.now().strftime("%H:%M:%S"),
@@ -331,7 +528,10 @@ def scanner_loop():
                 }
 
                 messages.append(msg_data)
+
                 save_log(msg_data)
+
+                ai_analyze(msg_data)
 
                 timeline.appendleft(
                     f'[{msg_data["time"]}] {user_id}: {content[:40]}'
@@ -342,10 +542,16 @@ def scanner_loop():
                 stats["messages"] += 1
                 stats["risk_total"] += risk
 
+                update_reputation(user_id, risk)
+
                 for f in flags:
                     stats["flags"][f] += 1
 
+                calculate_global_threat()
+
                 if risk >= 60:
+                    alert_counter += 1
+
                     critical_alerts.appendleft(msg_data)
                     save_evidence(msg_data)
 
@@ -354,12 +560,14 @@ def scanner_loop():
                     except:
                         pass
 
+                if INCIDENT_MODE:
+                    save_evidence(msg_data)
+
             time.sleep(2)
 
         except Exception as e:
             print("Erro scanner:", e)
             time.sleep(2)
-
 
 # =========================
 # COMMANDS
@@ -375,7 +583,6 @@ def export_report():
 
     with open("report.json", "w", encoding="utf-8") as f:
         json.dump(report, f, indent=4)
-
 
 
 def investigate_user(user_id):
@@ -398,7 +605,6 @@ def investigate_user(user_id):
         console.print(f" - {k}: {v}")
 
 
-
 def comando_loop():
     while True:
         try:
@@ -418,6 +624,19 @@ def comando_loop():
                     console.print(f"Mensagens: {len(messages)}")
                     console.print(f"Alertas: {len(critical_alerts)}")
 
+                elif cmd.startswith("!search "):
+                    term = cmd.split(maxsplit=1)[1]
+                    search_messages(term)
+
+                elif cmd == "!evidence":
+                    list_evidence()
+
+                elif cmd == "!incident start":
+                    set_incident(True)
+
+                elif cmd == "!incident stop":
+                    set_incident(False)
+
                 elif cmd == "!sair":
                     os._exit(0)
 
@@ -425,7 +644,6 @@ def comando_loop():
             print("Erro comando:", e)
 
         time.sleep(1)
-
 
 # =========================
 # DASHBOARD
@@ -451,8 +669,6 @@ def make_dashboard():
         Layout(name="timeline")
     )
 
-    # HEADER
-
     layout["header"].update(
         Panel(
             Align.center(
@@ -462,34 +678,22 @@ def make_dashboard():
         )
     )
 
-    # ALERTS
-
-    alert_table = Table(expand=True)
-
-    alert_table.add_column("RISK")
-    alert_table.add_column("USER")
-    alert_table.add_column("FLAGS")
-
-    for a in list(critical_alerts)[:10]:
-        alert_table.add_row(
-            str(a["risk"]),
-            a["user"],
-            ", ".join(a["flags"])
-        )
-
-    layout["alerts"].update(
-        Panel(alert_table, title="Critical Alerts")
+    ai_text = "\n".join(
+        list(ai_commentary)[:5]
     )
 
-    # TIMELINE
+    layout["alerts"].update(
+        Panel(
+            ai_text,
+            title="AI Analysis"
+        )
+    )
 
     timeline_text = "\n".join(list(timeline)[:15])
 
     layout["timeline"].update(
         Panel(timeline_text, title="Timeline")
     )
-
-    # MESSAGES
 
     msg_table = Table(expand=True)
 
@@ -522,11 +726,11 @@ def make_dashboard():
         Panel(msg_table, title="Live Monitoring")
     )
 
-    # FOOTER
-
     footer_text = (
-        f"Mensagens: {len(messages)} | "
-        f"Alertas: {len(critical_alerts)} | "
+        f"Threat: {threat_bar()} "
+        f"{global_threat}% | "
+        f"Msgs/min: {metrics['messages_per_minute']} | "
+        f"Alerts/min: {metrics['alerts_per_minute']} | "
         f"Users: {len(user_stats)}"
     )
 
@@ -535,7 +739,6 @@ def make_dashboard():
     )
 
     return layout
-
 
 # =========================
 # LIVE
@@ -547,7 +750,6 @@ def run_dashboard():
         while True:
             live.update(make_dashboard())
             time.sleep(0.5)
-
 
 # =========================
 # START
@@ -577,10 +779,10 @@ def start_scanner():
     threading.Thread(target=scanner_loop, daemon=True).start()
     threading.Thread(target=run_dashboard, daemon=True).start()
     threading.Thread(target=comando_loop, daemon=True).start()
+    threading.Thread(target=metrics_loop, daemon=True).start()
 
     while True:
         time.sleep(1)
-
 
 # =========================
 # MENU
@@ -612,7 +814,6 @@ def menu():
 
         elif op == "4":
             break
-
 
 # =========================
 # MAIN
