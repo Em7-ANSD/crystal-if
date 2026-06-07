@@ -80,7 +80,10 @@ VALID_KEYS = {
 
 TOKEN = None
 CHANNEL_ID = None
+GUILD_ID = None
 HEADERS = {}
+SELF_USER_ID = None
+COMMAND_PREFIX = "!"
 
 console = Console()
 
@@ -98,13 +101,9 @@ user_stats = defaultdict(lambda: {
 })
 
 # EXTRA GLOBALS
-
 global_threat = 0
-
 user_reputation = defaultdict(lambda: 100)
-
 ai_commentary = deque(maxlen=10)
-
 INCIDENT_MODE = False
 
 metrics = {
@@ -116,17 +115,12 @@ message_counter = 0
 alert_counter = 0
 
 SUSPICIOUS_EXT = {
-    ".exe",
-    ".scr",
-    ".bat",
-    ".cmd",
-    ".ps1"
+    ".exe", ".scr", ".bat", ".cmd", ".ps1"
 }
 
 # =========================
 # UTILS
 # =========================
-
 
 def sha256(data):
     return hashlib.sha256(data.encode()).hexdigest()
@@ -135,142 +129,85 @@ def sha256(data):
 # THREAT ENGINE
 # =========================
 
-
 def calculate_global_threat():
     global global_threat
-
     if not critical_alerts:
         global_threat = max(global_threat - 1, 0)
         return
-
     risks = [x["risk"] for x in critical_alerts]
-
     if risks:
-        global_threat = min(
-            int(sum(risks) / len(risks)),
-            100
-        )
+        global_threat = min(int(sum(risks) / len(risks)), 100)
 
 # =========================
 # THREAT BAR
 # =========================
 
-
 def threat_bar():
     filled = int(global_threat / 10)
-
-    return (
-        "█" * filled +
-        "░" * (10 - filled)
-    )
+    return "█" * filled + "░" * (10 - filled)
 
 # =========================
 # REPUTATION SYSTEM
 # =========================
 
-
 def update_reputation(user_id, risk):
     rep = user_reputation[user_id]
-
     rep -= int(risk / 10)
-
     rep = max(min(rep, 100), 0)
-
     user_reputation[user_id] = rep
 
 # =========================
 # AI COMMENTARY
 # =========================
 
-
 def ai_analyze(msg):
     content = msg["content"].lower()
-
     if "nitro" in content and "free" in content:
-        ai_commentary.appendleft(
-            "[AI] Possible Nitro scam detected."
-        )
-
+        ai_commentary.appendleft("[AI] Possible Nitro scam detected.")
     if msg["risk"] >= 80:
-        ai_commentary.appendleft(
-            "[AI] Critical threat behavior identified."
-        )
-
+        ai_commentary.appendleft("[AI] Critical threat behavior identified.")
     if "@everyone" in content:
-        ai_commentary.appendleft(
-            "[AI] Mass mention detected."
-        )
-
+        ai_commentary.appendleft("[AI] Mass mention detected.")
     if "http" in content and msg["risk"] >= 40:
-        ai_commentary.appendleft(
-            "[AI] Suspicious link behavior."
-        )
+        ai_commentary.appendleft("[AI] Suspicious link behavior.")
 
 # =========================
 # ATTACHMENT ANALYSIS
 # =========================
 
-
 def analyze_attachments(m):
     flags = []
-
     for a in m.get("attachments", []):
         filename = a["filename"].lower()
-
         for ext in SUSPICIOUS_EXT:
             if filename.endswith(ext):
-                flags.append(
-                    "SUSPICIOUS_ATTACHMENT"
-                )
-
+                flags.append("SUSPICIOUS_ATTACHMENT")
     return flags
 
 # =========================
 # METRICS LOOP
 # =========================
 
-
 def metrics_loop():
-    global message_counter
-    global alert_counter
-
+    global message_counter, alert_counter
     while True:
-        metrics["messages_per_minute"] = (
-            message_counter
-        )
-
-        metrics["alerts_per_minute"] = (
-            alert_counter
-        )
-
+        metrics["messages_per_minute"] = message_counter
+        metrics["alerts_per_minute"] = alert_counter
         message_counter = 0
         alert_counter = 0
-
         time.sleep(60)
 
 # =========================
 # SEARCH SYSTEM
 # =========================
 
-
 def search_messages(term):
-    console.print(
-        f"\n[bold cyan]SEARCH[/bold cyan] {term}\n"
-    )
-
+    console.print(f"\n[bold cyan]SEARCH[/bold cyan] {term}\n")
     found = False
-
     for msg in messages:
         if term.lower() in msg["content"].lower():
             found = True
-
-            console.print(
-                f"[{msg['time']}] "
-                f"{msg['user']} | "
-                f"RISK {msg['risk']} | "
-                f"{msg['content']}"
-            )
-
+            console.print(f"[{msg['time']}] {msg['user']} | RISK {msg['risk']} | {msg['content']}")
     if not found:
         console.print("Nenhum resultado.")
 
@@ -278,25 +215,18 @@ def search_messages(term):
 # EVIDENCE BROWSER
 # =========================
 
-
 def list_evidence():
-    console.print(
-        "\n[bold red]EVIDENCE FILES[/bold red]\n"
-    )
-
+    console.print("\n[bold red]EVIDENCE FILES[/bold red]\n")
     files = os.listdir(EVIDENCE_DIR)
-
     if not files:
         console.print("Nenhuma evidência.")
         return
-
     for f in files:
         console.print(f)
 
 # =========================
 # INCIDENT CONTROL
 # =========================
-
 
 def set_incident(state=True):
     global INCIDENT_MODE
@@ -306,11 +236,9 @@ def set_incident(state=True):
 # KEY SYSTEM
 # =========================
 
-
 def save_key(key, expire_at):
     with open(KEY_FILE, "w") as f:
         json.dump({"key": key, "expire_at": expire_at.timestamp()}, f)
-
 
 def load_key():
     try:
@@ -319,17 +247,13 @@ def load_key():
     except:
         return None
 
-
 def is_key_valid(data):
     if not data:
         return False
-
     return datetime.now() <= datetime.fromtimestamp(data["expire_at"])
-
 
 def login():
     saved = load_key()
-
     if saved and is_key_valid(saved):
         print("\n[+] Login automático\n")
         return True
@@ -350,11 +274,13 @@ def login():
 # CONFIG
 # =========================
 
-
-def save_config(token, channel_id):
+def save_config(token, channel_id, guild_id=None):
     with open(CONFIG_FILE, "w") as f:
-        json.dump({"token": token, "channel_id": channel_id}, f)
-
+        json.dump({
+            "token": token,
+            "channel_id": channel_id,
+            "guild_id": guild_id
+        }, f, indent=4)
 
 def load_config():
     try:
@@ -363,34 +289,97 @@ def load_config():
     except:
         return None
 
-
 def reset_config():
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
 
-
 def setup_panel():
     print("\n=== CONFIG ===\n")
-
     token = input("🔑 Token: ").strip()
     channel = input("📡 Channel ID: ").strip()
-
-    save_config(token, channel)
-
+    guild = input("🏠 Guild (Server) ID: ").strip() or None
+    save_config(token, channel, guild)
 
 def test_config(token, channel_id):
     url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1"
-
-    r = requests.get(url, headers={
-        "Authorization": token
-    })
-
+    r = requests.get(url, headers={"Authorization": token})
     return r.status_code == 200
+
+# =========================
+# MODERATION ACTIONS
+# =========================
+
+def moderate_user(action, user_id, reason=""):
+    if not GUILD_ID:
+        console.print("[red]Guild ID não configurado! Use !config ou reinicie o bot.[/red]")
+        return False
+
+    if action == "ban":
+        url = f"https://discord.com/api/v10/guilds/{GUILD_ID}/bans/{user_id}"
+        action_name = "BAN"
+        method = requests.put
+        data = {"reason": reason} if reason else {}
+    else:
+        url = f"https://discord.com/api/v10/guilds/{GUILD_ID}/members/{user_id}"
+        action_name = "KICK"
+        method = requests.delete
+        data = {}
+
+    try:
+        r = method(url, headers=HEADERS, json=data)
+        if r.status_code in (200, 204):
+            console.print(f"[bold green]✅ {action_name} realizado com sucesso em {user_id}[/bold green]")
+            save_evidence({
+                "action": action_name,
+                "target": user_id,
+                "reason": reason,
+                "timestamp": datetime.now().isoformat()
+            })
+            return True
+        else:
+            console.print(f"[red]❌ Falha ao {action_name} (Status: {r.status_code})[/red]")
+            return False
+    except Exception as e:
+        console.print(f"[red]Erro ao executar {action}: {e}[/red]")
+        return False
+
+# =========================
+# COMMAND HANDLER (no Discord)
+# =========================
+
+def process_command(msg):
+    if not SELF_USER_ID or msg.get("author", {}).get("id") != SELF_USER_ID:
+        return False
+
+    content = msg.get("content", "").strip()
+    if not content.startswith(COMMAND_PREFIX):
+        return False
+
+    parts = content.split()
+    cmd = parts[0].lower()
+    args = parts[1:]
+
+    if not args and cmd not in ["!incident", "!stats", "!evidence"]:
+        return False
+
+    user_id = args[0] if args else None
+    reason = " ".join(args[1:]) if len(args) > 1 else "Comando via Crystal Forensic"
+
+    if cmd == "!ban" and user_id:
+        console.print(f"[bold red]⚠️ BAN DETECTADO → {user_id}[/bold red]")
+        moderate_user("ban", user_id, reason)
+        return True
+
+    elif cmd == "!kick" and user_id:
+        console.print(f"[bold yellow]⚠️ KICK DETECTADO → {user_id}[/bold yellow]")
+        moderate_user("kick", user_id, reason)
+        return True
+
+    return False
 
 # =========================
 # ANALYSIS
 # =========================
-
 
 def analyze_message(content, user_id):
     risk = 0
@@ -410,13 +399,9 @@ def analyze_message(content, user_id):
         risk += THREAT_WEIGHTS["WATCHLIST"]
 
     recent = user_stats[user_id]["last_messages"]
-
     now = time.time()
-
     recent.append(now)
-
     recent_msgs = [x for x in recent if now - x < 10]
-
     if len(recent_msgs) >= 5:
         flags.append("SPAM")
         risk += THREAT_WEIGHTS["SPAM"]
@@ -427,18 +412,14 @@ def analyze_message(content, user_id):
 # EVIDENCE
 # =========================
 
-
 def save_evidence(data):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
     filename = os.path.join(EVIDENCE_DIR, f"evidence_{timestamp}.json")
-
     evidence = {
         "hash": sha256(json.dumps(data)),
         "timestamp": timestamp,
         "data": data
     }
-
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(evidence, f, indent=4)
 
@@ -446,20 +427,15 @@ def save_evidence(data):
 # LOGGING
 # =========================
 
-
 def save_log(msg):
     try:
         logs = []
-
         if os.path.exists(LOG_FILE):
             with open(LOG_FILE, "r", encoding="utf-8") as f:
                 logs = json.load(f)
-
         logs.append(msg)
-
         with open(LOG_FILE, "w", encoding="utf-8") as f:
             json.dump(logs, f, indent=4)
-
     except Exception as e:
         print("Erro log:", e)
 
@@ -467,32 +443,25 @@ def save_log(msg):
 # DISCORD
 # =========================
 
-
 def fetch_messages():
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit=20"
-
     r = requests.get(url, headers=HEADERS)
-
     if r.status_code == 429:
         retry = r.json().get("retry_after", 2)
         time.sleep(retry)
         return []
-
     return r.json()
 
 # =========================
 # SCANNER LOOP
 # =========================
 
-
 def scanner_loop():
-    global message_counter
-    global alert_counter
+    global message_counter, alert_counter, GUILD_ID
 
     while True:
         try:
             msgs = fetch_messages()
-
             if not isinstance(msgs, list):
                 time.sleep(2)
                 continue
@@ -503,15 +472,23 @@ def scanner_loop():
 
                 seen.add(m["id"])
 
+                # NOVO: Processar comandos digitados no chat
+                if process_command(m):
+                    # Apagar mensagem de comando (opcional)
+                    try:
+                        delete_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages/{m['id']}"
+                        requests.delete(delete_url, headers=HEADERS)
+                    except:
+                        pass
+                    continue
+
                 content = m.get("content", "")
                 user_id = m["author"]["id"]
 
                 risk, flags = analyze_message(content, user_id)
-
                 message_counter += 1
 
                 attachment_flags = analyze_attachments(m)
-
                 if attachment_flags:
                     flags.extend(attachment_flags)
                     risk += 40
@@ -528,20 +505,13 @@ def scanner_loop():
                 }
 
                 messages.append(msg_data)
-
                 save_log(msg_data)
-
                 ai_analyze(msg_data)
-
-                timeline.appendleft(
-                    f'[{msg_data["time"]}] {user_id}: {content[:40]}'
-                )
+                timeline.appendleft(f'[{msg_data["time"]}] {user_id}: {content[:40]}')
 
                 stats = user_stats[user_id]
-
                 stats["messages"] += 1
                 stats["risk_total"] += risk
-
                 update_reputation(user_id, risk)
 
                 for f in flags:
@@ -551,10 +521,8 @@ def scanner_loop():
 
                 if risk >= 60:
                     alert_counter += 1
-
                     critical_alerts.appendleft(msg_data)
                     save_evidence(msg_data)
-
                     try:
                         os.system("printf '\\a'")
                     except:
@@ -573,37 +541,24 @@ def scanner_loop():
 # COMMANDS
 # =========================
 
-
 def export_report():
     report = {
         "messages": list(messages),
         "alerts": list(critical_alerts),
         "timeline": list(timeline)
     }
-
     with open("report.json", "w", encoding="utf-8") as f:
         json.dump(report, f, indent=4)
 
-
 def investigate_user(user_id):
     console.print(f"\n[bold red]Investigação:[/bold red] {user_id}\n")
-
     stats = user_stats[user_id]
-
     console.print(f"Mensagens: {stats['messages']}")
-
-    avg = 0
-
-    if stats['messages']:
-        avg = stats['risk_total'] / stats['messages']
-
+    avg = stats['risk_total'] / stats['messages'] if stats['messages'] else 0
     console.print(f"Risco médio: {avg:.2f}")
-
     console.print("Flags:")
-
     for k, v in stats["flags"].items():
         console.print(f" - {k}: {v}")
-
 
 def comando_loop():
     while True:
@@ -611,59 +566,46 @@ def comando_loop():
             if os.path.exists(COMMAND_FILE):
                 with open(COMMAND_FILE, "r") as f:
                     cmd = f.read().strip()
-
                 os.remove(COMMAND_FILE)
 
                 if cmd == "!exportar":
                     export_report()
-
                 elif cmd.startswith("!investigar "):
                     investigate_user(cmd.split()[1])
-
                 elif cmd == "!stats":
                     console.print(f"Mensagens: {len(messages)}")
                     console.print(f"Alertas: {len(critical_alerts)}")
-
                 elif cmd.startswith("!search "):
                     term = cmd.split(maxsplit=1)[1]
                     search_messages(term)
-
                 elif cmd == "!evidence":
                     list_evidence()
-
                 elif cmd == "!incident start":
                     set_incident(True)
-
                 elif cmd == "!incident stop":
                     set_incident(False)
-
                 elif cmd == "!sair":
                     os._exit(0)
 
         except Exception as e:
             print("Erro comando:", e)
-
         time.sleep(1)
 
 # =========================
 # DASHBOARD
 # =========================
 
-
 def make_dashboard():
     layout = Layout()
-
     layout.split_column(
         Layout(name="header", size=3),
         Layout(name="main"),
         Layout(name="footer", size=3)
     )
-
     layout["main"].split_row(
         Layout(name="left"),
         Layout(name="right", ratio=2)
     )
-
     layout["left"].split_column(
         Layout(name="alerts"),
         Layout(name="timeline")
@@ -671,32 +613,18 @@ def make_dashboard():
 
     layout["header"].update(
         Panel(
-            Align.center(
-                "[bold cyan]CRYSTAL X FORENSIC SCANNER[/bold cyan]"
-            ),
+            Align.center("[bold cyan]CRYSTAL X FORENSIC SCANNER[/bold cyan]"),
             style="green"
         )
     )
 
-    ai_text = "\n".join(
-        list(ai_commentary)[:5]
-    )
-
-    layout["alerts"].update(
-        Panel(
-            ai_text,
-            title="AI Analysis"
-        )
-    )
+    ai_text = "\n".join(list(ai_commentary)[:5])
+    layout["alerts"].update(Panel(ai_text or "Sem análises ainda", title="AI Analysis"))
 
     timeline_text = "\n".join(list(timeline)[:15])
-
-    layout["timeline"].update(
-        Panel(timeline_text, title="Timeline")
-    )
+    layout["timeline"].update(Panel(timeline_text or "Timeline vazia", title="Timeline"))
 
     msg_table = Table(expand=True)
-
     msg_table.add_column("Hora")
     msg_table.add_column("User")
     msg_table.add_column("Mensagem")
@@ -705,9 +633,7 @@ def make_dashboard():
 
     for msg in list(messages)[-15:]:
         risk = msg["risk"]
-
         style = "green"
-
         if risk >= 60:
             style = "red"
         elif risk >= 30:
@@ -722,28 +648,16 @@ def make_dashboard():
             style=style
         )
 
-    layout["right"].update(
-        Panel(msg_table, title="Live Monitoring")
-    )
+    layout["right"].update(Panel(msg_table, title="Live Monitoring"))
 
     footer_text = (
-        f"Threat: {threat_bar()} "
-        f"{global_threat}% | "
+        f"Threat: {threat_bar()} {global_threat}% | "
         f"Msgs/min: {metrics['messages_per_minute']} | "
         f"Alerts/min: {metrics['alerts_per_minute']} | "
         f"Users: {len(user_stats)}"
     )
-
-    layout["footer"].update(
-        Panel(footer_text)
-    )
-
+    layout["footer"].update(Panel(footer_text))
     return layout
-
-# =========================
-# LIVE
-# =========================
-
 
 def run_dashboard():
     with Live(refresh_per_second=2, screen=True) as live:
@@ -755,12 +669,10 @@ def run_dashboard():
 # START
 # =========================
 
-
 def start_scanner():
-    global TOKEN, CHANNEL_ID, HEADERS
+    global TOKEN, CHANNEL_ID, GUILD_ID, HEADERS, SELF_USER_ID
 
     config = load_config()
-
     if not config:
         setup_panel()
         config = load_config()
@@ -771,10 +683,17 @@ def start_scanner():
 
     TOKEN = config["token"]
     CHANNEL_ID = config["channel_id"]
+    GUILD_ID = config.get("guild_id")
+    HEADERS = {"Authorization": TOKEN}
 
-    HEADERS = {
-        "Authorization": TOKEN
-    }
+    # Pegar ID do próprio usuário
+    try:
+        me = requests.get("https://discord.com/api/v10/users/@me", headers=HEADERS)
+        if me.status_code == 200:
+            SELF_USER_ID = me.json()["id"]
+            console.print(f"[green]Selfbot carregado como: {SELF_USER_ID}[/green]")
+    except:
+        pass
 
     threading.Thread(target=scanner_loop, daemon=True).start()
     threading.Thread(target=run_dashboard, daemon=True).start()
@@ -788,37 +707,29 @@ def start_scanner():
 # MENU
 # =========================
 
-
 def menu():
     while True:
         os.system("clear")
-
         print("CRYSTAL X FORENSIC\n")
-
         print("[1] Start Scanner")
         print("[2] Reset Config")
         print("[3] Login Key")
         print("[4] Sair\n")
-
         op = input(">> ")
 
         if op == "1":
             if login():
                 start_scanner()
-
         elif op == "2":
             reset_config()
-
         elif op == "3":
             login()
-
         elif op == "4":
             break
 
 # =========================
 # MAIN
 # =========================
-
 
 if __name__ == "__main__":
     menu()
