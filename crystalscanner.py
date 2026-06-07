@@ -30,7 +30,7 @@ EVIDENCE_DIR = "evidence"
 os.makedirs(EVIDENCE_DIR, exist_ok=True)
 
 # =========================
-# REGEX
+# REGEX & THREAT
 # =========================
 
 REGEX_PATTERNS = {
@@ -41,36 +41,13 @@ REGEX_PATTERNS = {
     "URL": r"https?://[^\s]+"
 }
 
-# =========================
-# THREAT WEIGHTS
-# =========================
-
 THREAT_WEIGHTS = {
-    "TOKEN": 70,
-    "WEBHOOK": 60,
-    "IP": 20,
-    "EMAIL": 15,
-    "URL": 10,
-    "SPAM": 25,
-    "WATCHLIST": 80,
-    "MASS_MENTION": 40,
-    "SUSPICIOUS_ATTACHMENT": 40
+    "TOKEN": 70, "WEBHOOK": 60, "IP": 20, "EMAIL": 15, "URL": 10,
+    "SPAM": 25, "WATCHLIST": 80, "MASS_MENTION": 40, "SUSPICIOUS_ATTACHMENT": 40
 }
-
-# =========================
-# WATCHLIST
-# =========================
 
 WATCHLIST = {"1234567890"}
-
-# =========================
-# KEYS
-# =========================
-
-VALID_KEYS = {
-    "CRYSTAL-IF-001": 1,
-    "TESTE-123": 0.01
-}
+VALID_KEYS = {"CRYSTAL-IF-001": 1, "TESTE-123": 0.01}
 
 # =========================
 # GLOBAL
@@ -91,8 +68,7 @@ critical_alerts = deque(maxlen=20)
 timeline = deque(maxlen=100)
 
 user_stats = defaultdict(lambda: {
-    "messages": 0,
-    "risk_total": 0,
+    "messages": 0, "risk_total": 0,
     "last_messages": deque(maxlen=10),
     "flags": defaultdict(int)
 })
@@ -114,10 +90,6 @@ SUSPICIOUS_EXT = {".exe", ".scr", ".bat", ".cmd", ".ps1"}
 
 def sha256(data):
     return hashlib.sha256(data.encode()).hexdigest()
-
-# =========================
-# THREAT ENGINE
-# =========================
 
 def calculate_global_threat():
     global global_threat
@@ -154,19 +126,7 @@ def analyze_attachments(m):
     return flags
 
 # =========================
-# METRICS
-# =========================
-
-def metrics_loop():
-    global message_counter, alert_counter
-    while True:
-        metrics["messages_per_minute"] = message_counter
-        metrics["alerts_per_minute"] = alert_counter
-        message_counter = alert_counter = 0
-        time.sleep(60)
-
-# =========================
-# MODERATION + COMMAND DELETE
+# MODERATION + DELETE RÁPIDO
 # =========================
 
 def moderate_user(action, user_id, reason=""):
@@ -204,14 +164,13 @@ def moderate_user(action, user_id, reason=""):
         return False
 
 def delete_message(message_id):
-    """Apaga a mensagem automaticamente"""
+    """Deleta a mensagem o mais rápido possível"""
     try:
         url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages/{message_id}"
         r = requests.delete(url, headers=HEADERS)
         if r.status_code in (200, 204):
-            console.print(f"[dim]Mensagem de comando apagada.[/dim]")
-        else:
-            console.print(f"[dim]Não foi possível apagar a mensagem (Status: {r.status_code})[/dim]")
+            console.print("[dim]Comando apagado.[/dim]")
+        # else: silencioso para não poluir
     except:
         pass
 
@@ -243,15 +202,15 @@ def process_command(msg):
         executed = True
 
     if executed:
-        # Apaga o comando automaticamente
-        time.sleep(0.8)  # Pequeno delay para evitar rate limit
+        # DELEÇÃO MAIS RÁPIDA (0.3s)
+        time.sleep(0.3)
         delete_message(msg["id"])
         return True
 
     return False
 
 # =========================
-# CONFIG
+# CONFIG, ANALYSIS, ETC.
 # =========================
 
 def save_config(token, channel_id, guild_id=None):
@@ -277,10 +236,6 @@ def test_config(token, channel_id):
     r = requests.get(f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1",
                      headers={"Authorization": token})
     return r.status_code == 200
-
-# =========================
-# ANALYSIS + EVIDENCE + LOGGING
-# =========================
 
 def analyze_message(content, user_id):
     risk = 0
@@ -349,10 +304,6 @@ def set_incident(state=True):
     global INCIDENT_MODE
     INCIDENT_MODE = state
 
-# =========================
-# DISCORD & SCANNER
-# =========================
-
 def fetch_messages():
     url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages?limit=20"
     r = requests.get(url, headers=HEADERS)
@@ -360,6 +311,10 @@ def fetch_messages():
         time.sleep(r.json().get("retry_after", 2))
         return []
     return r.json()
+
+# =========================
+# SCANNER LOOP
+# =========================
 
 def scanner_loop():
     global message_counter, alert_counter, GUILD_ID
@@ -376,18 +331,17 @@ def scanner_loop():
                     continue
                 seen.add(m["id"])
 
-                # Processar comandos + apagar automaticamente
                 if process_command(m):
                     continue
 
-                # Análise normal de mensagens
                 content = m.get("content", "")
                 user_id = m["author"]["id"]
 
                 risk, flags = analyze_message(content, user_id)
                 message_counter += 1
 
-                if attachment_flags := analyze_attachments(m):
+                attachment_flags = analyze_attachments(m)
+                if attachment_flags:
                     flags.extend(attachment_flags)
                     risk = min(risk + 40, 100)
 
@@ -472,6 +426,16 @@ def export_report():
             "timeline": list(timeline)
         }, f, indent=4)
 
+def search_messages(term):
+    console.print(f"\n[bold cyan]SEARCH[/bold cyan] {term}\n")
+    found = False
+    for msg in messages:
+        if term.lower() in msg["content"].lower():
+            found = True
+            console.print(f"[{msg['time']}] {msg['user']} | RISK {msg['risk']} | {msg['content']}")
+    if not found:
+        console.print("Nenhum resultado.")
+
 # =========================
 # DASHBOARD
 # =========================
@@ -550,7 +514,7 @@ def start_scanner():
     threading.Thread(target=comando_loop, daemon=True).start()
     threading.Thread(target=metrics_loop, daemon=True).start()
 
-    console.print("[bold green]Scanner iniciado! Comandos !ban e !kick agora funcionam no chat.[/bold green]")
+    console.print("[bold green]Scanner iniciado! Comandos !ban / !kick com deleção rápida.[/bold green]")
 
 # =========================
 # MENU + LOGIN
@@ -584,8 +548,7 @@ def load_key():
         return None
 
 def is_key_valid(data):
-    if not data:
-        return False
+    if not data: return False
     return datetime.now() <= datetime.fromtimestamp(data["expire_at"])
 
 def reset_config():
