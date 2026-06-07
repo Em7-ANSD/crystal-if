@@ -18,6 +18,20 @@ from datetime import datetime, timedelta
 import requests
 
 # =========================
+# ARTE ASCII DSI
+# =========================
+
+DSI_BANNER = r"""
+██████╗ ███████╗██╗    ██╗   ██████╗ ███████╗██╗
+██╔══██╗██╔════╝██║    ██║   ██╔══██╗██╔════╝██║
+██║  ██║███████╗██║ █╗ ██║   ██║  ██║█████╗  ██║
+██║  ██║╚════██║██║███╗██║   ██║  ██║██╔══╝  ╚═╝
+██████╔╝███████║╚███╔███╔╝   ██████╔╝███████╗██╗
+╚═════╝ ╚══════╝ ╚══╝╚══╝    ╚═════╝ ╚══════╝╚═╝
+     DEPARTAMENTO DE SEGURANÇA INTERNA
+"""
+
+# =========================
 # FILES
 # =========================
 
@@ -47,7 +61,7 @@ THREAT_WEIGHTS = {
 }
 
 WATCHLIST = {"1234567890"}
-VALID_KEYS = {"CRYSTAL-IF-001": 1, "TESTE-123": 0.01}
+VALID_KEYS = {"DSI-001": 30, "DSI-TEST": 1}
 
 # =========================
 # GLOBAL
@@ -126,6 +140,18 @@ def analyze_attachments(m):
     return flags
 
 # =========================
+# METRICS
+# =========================
+
+def metrics_loop():
+    global message_counter, alert_counter
+    while True:
+        metrics["messages_per_minute"] = message_counter
+        metrics["alerts_per_minute"] = alert_counter
+        message_counter = alert_counter = 0
+        time.sleep(60)
+
+# =========================
 # MODERATION + DELETE RÁPIDO
 # =========================
 
@@ -164,13 +190,9 @@ def moderate_user(action, user_id, reason=""):
         return False
 
 def delete_message(message_id):
-    """Deleta a mensagem o mais rápido possível"""
     try:
         url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages/{message_id}"
-        r = requests.delete(url, headers=HEADERS)
-        if r.status_code in (200, 204):
-            console.print("[dim]Comando apagado.[/dim]")
-        # else: silencioso para não poluir
+        requests.delete(url, headers=HEADERS)
     except:
         pass
 
@@ -187,30 +209,29 @@ def process_command(msg):
     args = parts[1:]
 
     user_id = args[0] if args else None
-    reason = " ".join(args[1:]) if len(args) > 1 else "Comando via Crystal Forensic Scanner"
+    reason = " ".join(args[1:]) if len(args) > 1 else "Ação DSI - Departamento de Segurança Interna"
 
     executed = False
 
     if cmd == "!ban" and user_id:
-        console.print(f"[bold red]⚠️ BAN DETECTADO → {user_id}[/bold red]")
+        console.print(f"[bold red]⚠️ DSI - BAN DETECTADO → {user_id}[/bold red]")
         moderate_user("ban", user_id, reason)
         executed = True
 
     elif cmd == "!kick" and user_id:
-        console.print(f"[bold yellow]⚠️ KICK DETECTADO → {user_id}[/bold yellow]")
+        console.print(f"[bold yellow]⚠️ DSI - KICK DETECTADO → {user_id}[/bold yellow]")
         moderate_user("kick", user_id, reason)
         executed = True
 
     if executed:
-        # DELEÇÃO MAIS RÁPIDA (0.3s)
-        time.sleep(0.3)
+        time.sleep(0.25)
         delete_message(msg["id"])
         return True
 
     return False
 
 # =========================
-# CONFIG, ANALYSIS, ETC.
+# CONFIG
 # =========================
 
 def save_config(token, channel_id, guild_id=None):
@@ -225,17 +246,21 @@ def load_config():
         return None
 
 def setup_panel():
-    print("\n=== CRYSTAL X - CONFIGURAÇÃO ===\n")
+    print("\n=== DSI - DEPARTAMENTO DE SEGURANÇA INTERNA ===\n")
     token = input("🔑 Token do Usuário: ").strip()
     channel = input("📡 Channel ID: ").strip()
     guild = input("🏠 Guild (Server) ID: ").strip()
     save_config(token, channel, guild or None)
-    print("\n[+] Configuração salva!\n")
+    print("\n[+] Configuração DSI salva!\n")
 
 def test_config(token, channel_id):
     r = requests.get(f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=1",
                      headers={"Authorization": token})
     return r.status_code == 200
+
+# =========================
+# ANALYSIS, EVIDENCE, LOG
+# =========================
 
 def analyze_message(content, user_id):
     risk = 0
@@ -282,7 +307,7 @@ def save_log(msg):
         pass
 
 def investigate_user(user_id):
-    console.print(f"\n[bold red]Investigação: {user_id}[/bold red]\n")
+    console.print(f"\n[bold red]DSI - Investigação: {user_id}[/bold red]\n")
     stats = user_stats[user_id]
     console.print(f"Mensagens: {stats['messages']}")
     avg = stats['risk_total'] / stats['messages'] if stats['messages'] else 0
@@ -292,7 +317,7 @@ def investigate_user(user_id):
         console.print(f" - {k}: {v}")
 
 def list_evidence():
-    console.print("\n[bold red]EVIDENCE FILES[/bold red]\n")
+    console.print("\n[bold red]DSI - ARQUIVOS DE EVIDÊNCIA[/bold red]\n")
     files = os.listdir(EVIDENCE_DIR)
     if not files:
         console.print("Nenhuma evidência.")
@@ -387,7 +412,7 @@ def scanner_loop():
             time.sleep(2)
 
 # =========================
-# COMANDO LOOP (arquivo)
+# COMANDO LOOP
 # =========================
 
 def comando_loop():
@@ -427,7 +452,7 @@ def export_report():
         }, f, indent=4)
 
 def search_messages(term):
-    console.print(f"\n[bold cyan]SEARCH[/bold cyan] {term}\n")
+    console.print(f"\n[bold cyan]DSI - BUSCA[/bold cyan] {term}\n")
     found = False
     for msg in messages:
         if term.lower() in msg["content"].lower():
@@ -442,17 +467,23 @@ def search_messages(term):
 
 def make_dashboard():
     layout = Layout()
-    layout.split_column(Layout(name="header", size=3), Layout(name="main"), Layout(name="footer", size=3))
+    layout.split_column(Layout(name="header", size=6), Layout(name="main"), Layout(name="footer", size=3))
     layout["main"].split_row(Layout(name="left"), Layout(name="right", ratio=2))
     layout["left"].split_column(Layout(name="alerts"), Layout(name="timeline"))
 
-    layout["header"].update(Panel(Align.center("[bold cyan]CRYSTAL X FORENSIC SCANNER[/bold cyan]"), style="green"))
+    layout["header"].update(
+        Panel(
+            Align.center(Text.from_ansi(DSI_BANNER)),
+            style="bold red",
+            title="DEPARTAMENTO DE SEGURANÇA INTERNA"
+        )
+    )
 
     ai_text = "\n".join(list(ai_commentary)[:5]) or "Sem análises ainda"
-    layout["alerts"].update(Panel(ai_text, title="AI Analysis"))
+    layout["alerts"].update(Panel(ai_text, title="Análise IA"))
 
     timeline_text = "\n".join(list(timeline)[:15]) or "Timeline vazia"
-    layout["timeline"].update(Panel(timeline_text, title="Timeline"))
+    layout["timeline"].update(Panel(timeline_text, title="Linha do Tempo"))
 
     msg_table = Table(expand=True)
     msg_table.add_column("Hora")
@@ -468,7 +499,7 @@ def make_dashboard():
             str(msg["risk"]), ", ".join(msg["flags"]), style=style
         )
 
-    layout["right"].update(Panel(msg_table, title="Live Monitoring"))
+    layout["right"].update(Panel(msg_table, title="Monitoramento em Tempo Real"))
 
     footer_text = f"Threat: {threat_bar()} {global_threat}% | Msgs/min: {metrics['messages_per_minute']} | Alerts/min: {metrics['alerts_per_minute']}"
     layout["footer"].update(Panel(footer_text))
@@ -501,7 +532,7 @@ def start_scanner():
         me = requests.get("https://discord.com/api/v10/users/@me", headers=HEADERS)
         if me.status_code == 200:
             SELF_USER_ID = me.json()["id"]
-            console.print(f"[green]Selfbot carregado como: {SELF_USER_ID}[/green]")
+            console.print(f"[green]DSI Selfbot carregado como: {SELF_USER_ID}[/green]")
     except:
         pass
 
@@ -514,26 +545,26 @@ def start_scanner():
     threading.Thread(target=comando_loop, daemon=True).start()
     threading.Thread(target=metrics_loop, daemon=True).start()
 
-    console.print("[bold green]Scanner iniciado! Comandos !ban / !kick com deleção rápida.[/bold green]")
+    console.print("[bold green]DSI Scanner iniciado com sucesso![/bold green]")
 
 # =========================
-# MENU + LOGIN
+# LOGIN + MENU
 # =========================
 
 def login():
     saved = load_key()
     if saved and is_key_valid(saved):
-        print("\n[+] Login automático\n")
+        print("\n[+] Login DSI automático\n")
         return True
 
-    print("\n=== CRYSTAL IF | LOGIN ===\n")
-    key = input("🔐 Key: ").strip()
+    print("\n=== DSI - DEPARTAMENTO DE SEGURANÇA INTERNA | LOGIN ===\n")
+    key = input("🔐 Key DSI: ").strip()
     if key in VALID_KEYS:
         expire = datetime.now() + timedelta(days=VALID_KEYS[key])
         save_key(key, expire)
-        print("\n[+] Acesso liberado\n")
+        print("\n[+] Acesso DSI liberado\n")
         return True
-    print("\n[-] KEY inválida\n")
+    print("\n[-] KEY DSI inválida\n")
     return False
 
 def save_key(key, expire_at):
@@ -554,17 +585,22 @@ def is_key_valid(data):
 def reset_config():
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
-        print("Config resetada.")
+        print("Config DSI resetada.")
 
 def menu():
     while True:
         os.system("clear")
-        print("CRYSTAL X FORENSIC SCANNER\n")
-        print("[1] Start Scanner")
-        print("[2] Reset Config")
-        print("[3] Login Key")
+        console.print(DSI_BANNER, style="bold red")
+        print("═" * 70)
+        print("              DSI - DEPARTAMENTO DE SEGURANÇA INTERNA")
+        print("═" * 70 + "\n")
+        
+        print("[1] Iniciar Scanner")
+        print("[2] Resetar Configuração")
+        print("[3] Login Key DSI")
         print("[4] Sair\n")
-        op = input(">> ")
+        
+        op = input(">> ").strip()
 
         if op == "1":
             if login():
